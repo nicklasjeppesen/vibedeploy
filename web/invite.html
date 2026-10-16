@@ -1,0 +1,14 @@
+{{define "content"}}
+<section class="narrow card">
+  <h1>Du er inviteret</h1>
+  <p class="muted">Opret din konto for at åbne de apps, der bliver delt med dig.</p>
+  {{if .Data.Err}}<div class="note bad" role="alert">{{.Data.Err}}</div>{{end}}
+  <form method="post" class="stack">
+    <label>Dit navn<input name="name" value="{{.Data.Name}}" autocomplete="name" required></label>
+    <label>E-mail<input type="email" name="email" value="{{.Data.Email}}" autocomplete="email" required></label>
+    <label>Adgangskode<input type="password" name="password" minlength="12" autocomplete="new-password" required>
+      <span class="hint">Mindst 12 tegn.</span></label>
+    <button class="btn big">Opret konto</button>
+  </form>
+</section>
+{{end}}

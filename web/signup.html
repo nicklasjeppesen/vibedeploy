@@ -1,0 +1,17 @@
+{{define "content"}}
+<section class="narrow card">
+  <p class="step">Trin 1 af 3 · Konto</p>
+  <h1>Velkommen. Lad os oprette din konto.</h1>
+  <p class="muted">Du bliver ejer af denne server. Kontoen findes kun her, hos dig selv.</p>
+  {{if .Data.Err}}<div class="note bad" role="alert">{{.Data.Err}}</div>{{end}}
+  <form method="post" action="/signup" class="stack">
+    {{if .Data.NeedCode}}<label>Opsætningskode<input name="setupcode" autocomplete="off" required>
+      <span class="hint">Står i serverens log, hvor programmet blev startet. Den sikrer, at kun du kan oprette kontoen.</span></label>{{end}}
+    <label>Dit navn<input name="name" value="{{.Data.Name}}" autocomplete="name" required></label>
+    <label>E-mail<input type="email" name="email" value="{{.Data.Email}}" autocomplete="email" required></label>
+    <label>Adgangskode<input type="password" name="password" minlength="12" autocomplete="new-password" required>
+      <span class="hint">Mindst 12 tegn. En lang sætning er nemmere at huske og sværere at gætte.</span></label>
+    <button class="btn big">Opret konto</button>
+  </form>
+</section>
+{{end}}

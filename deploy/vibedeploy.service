@@ -1,0 +1,35 @@
+# Gem som /etc/systemd/system/vibedeploy.service
+# Erstat example.com med dit domæne.
+[Unit]
+Description=Vibe Deploy
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+User=vibedeploy
+Group=vibedeploy
+SupplementaryGroups=docker
+ExecStart=/usr/local/bin/vibedeploy \
+  -runtime docker \
+  -addr 127.0.0.1:8080 \
+  -domain example.com \
+  -public-url https://example.com \
+  -data /var/lib/vibedeploy
+Environment=HOME=/var/lib/vibedeploy
+# Nøglen til hemmeligheder ligger uden for data-mappen (lav den med: head -c 32 /dev/urandom | base64 > /etc/vibedeploy/secret.key)
+LoadCredential=secret.key:/etc/vibedeploy/secret.key
+# Valgfri: en opsætningskode, du selv vælger (VIBEDEPLOY_SETUP_CODE=...), i stedet for den, der står i loggen
+EnvironmentFile=-/etc/vibedeploy/env
+Restart=on-failure
+RestartSec=3
+StateDirectory=vibedeploy
+StateDirectoryMode=0700
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/vibedeploy
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+# Byggede binærer
+/vibedeploy
+/dist/
+# Lokale data (konti, apps, nøgle til hemmeligheder)
+/data/
+*.db
+*.db-wal
+*.db-shm
+secret.key
+state.json*
+.DS_Store

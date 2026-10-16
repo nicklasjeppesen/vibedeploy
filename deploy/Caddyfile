@@ -1,0 +1,27 @@
+# Erstat example.com med dit domæne (to steder) og e-mailadressen.
+# Caddy henter og fornyer https-certifikater automatisk.
+{
+	email din@email.dk
+	# Caddy spørger Vibe Deploy, om et navn hører til en rigtig app, før der udstedes certifikat.
+	on_demand_tls {
+		ask http://127.0.0.1:8080/internal/tls-ask
+	}
+}
+
+# Dashboardet og MCP-adressen
+example.com {
+	reverse_proxy 127.0.0.1:8080
+}
+
+# Dine apps (navn.example.com)
+*.example.com {
+	tls {
+		on_demand
+	}
+	reverse_proxy 127.0.0.1:8080
+}
+
+# http://SERVERENS-IP: statussiden under installationen (domæner sendes stadig til https)
+:80 {
+	reverse_proxy 127.0.0.1:8080
+}

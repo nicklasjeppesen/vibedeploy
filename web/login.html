@@ -1,0 +1,12 @@
+{{define "content"}}
+<section class="narrow card">
+  <h1>Log ind</h1>
+  {{if .Data.Err}}<div class="note bad" role="alert">{{.Data.Err}}</div>{{end}}
+  <form method="post" action="/login" class="stack">
+    <input type="hidden" name="next" value="{{.Data.Next}}">
+    <label>E-mail<input type="email" name="email" autocomplete="username" required></label>
+    <label>Adgangskode<input type="password" name="password" autocomplete="current-password" required></label>
+    <button class="btn big">Log ind</button>
+  </form>
+</section>
+{{end}}

@@ -1,0 +1,40 @@
+{{define "content"}}
+<section class="wide card">
+  <p class="step">Trin 2 af 3 · Forbind din AI</p>
+  <h1>Giv din AI adgang til din server</h1>
+  <p class="muted">Kopiér adressen, og tilføj den som en ny forbindelse (MCP) i din AI. Så kan den bygge og udgive apps for dig.</p>
+  <div class="urlbox"><code id="mcpurl">{{.Data.MCPURL}}</code><button class="btn light" type="button" data-copy="mcpurl">Kopiér</button></div>
+  <ol class="steps">
+    <li>Åbn din AI, og find stedet, hvor man tilføjer en ny <b>forbindelse</b> (MCP).</li>
+    <li>Indsæt adressen, og kald forbindelsen fx <b>Min server</b>.</li>
+    <li>Du sendes hertil igen for at logge ind og <b>godkende</b>.</li>
+  </ol>
+  <div class="note {{if .Data.Connected}}ok{{else}}warn{{end}}">{{if .Data.Connected}}Forbundet. Du kan nu bede din AI om at udgive en app.{{else}}Venter på, at din AI forbinder …{{end}}</div>
+  {{if .Data.Local}}<div class="note idle">Du kører lokalt. Claude Code og andre værktøjer på denne maskine kan bruge adressen direkte. Webtjenester som claude.ai kræver en offentlig https-adresse; start serveren med <code>-public-url</code> bag en tunnel (se README).</div>{{end}}
+</section>
+
+<section class="wide card">
+  <h2>Claude Code (kommandolinje)</h2>
+  <div class="urlbox"><code id="cc">claude mcp add --transport http min-server {{.Data.MCPURL}}</code><button class="btn light" type="button" data-copy="cc">Kopiér</button></div>
+  <p class="muted">Kør derefter <code>/mcp</code> i Claude Code, og vælg «Authenticate».</p>
+</section>
+
+<section class="wide card">
+  <h2>Adgangsnøgle (til værktøjer uden login-flow)</h2>
+  {{if .Data.NewToken}}
+    <div class="note warn">Kopiér nøglen nu. Den vises kun denne ene gang.</div>
+    <div class="urlbox"><code id="pat">{{.Data.NewToken}}</code><button class="btn light" type="button" data-copy="pat">Kopiér</button></div>
+    <div class="urlbox"><code id="patcmd">claude mcp add --transport http min-server {{.Data.MCPURL}} --header "Authorization: Bearer {{.Data.NewToken}}"</code><button class="btn light" type="button" data-copy="patcmd">Kopiér</button></div>
+  {{else}}
+    <form method="post" action="/connect/token" class="inline"><input name="label" placeholder="Navn, fx Min bærbare" aria-label="Navn på nøglen"><button class="btn ghost">Opret adgangsnøgle</button></form>
+  {{end}}
+</section>
+
+{{if .Data.Tokens}}
+<section class="wide card">
+  <h2>Forbundne AI-værktøjer</h2>
+  <ul class="plain">{{range .Data.Tokens}}<li>{{.Label}} <span class="muted">({{if eq .Kind "pat"}}adgangsnøgle{{else}}godkendt{{end}}, {{.Ago}})</span></li>{{end}}</ul>
+  <form method="post" action="/connect/revoke"><button class="btn danger">Fjern adgang for alle</button></form>
+</section>
+{{end}}
+{{end}}

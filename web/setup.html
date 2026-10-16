@@ -1,0 +1,18 @@
+{{define "content"}}
+<section class="card narrow">
+  <p class="step">Installation</p>
+  <h1>{{if .Data.Ready}}Serveren er klar{{else}}Serveren er næsten klar{{end}}</h1>
+  <p class="muted">Domæne: <b>{{.Data.Domain}}</b> · Server: <b>{{.Data.IP}}</b>{{if not .Data.Ready}} · Siden opdaterer sig selv.{{end}}</p>
+  <ul class="ticks setup">
+  {{range .Data.Checks}}
+    <li class="{{if .OK}}yes{{else}}no{{end}}"><b>{{.Name}}</b><br><span class="muted small">{{.Detail}}</span></li>
+  {{end}}
+  </ul>
+  {{if .Data.Ready}}
+    <p>Opret din konto. Du skal bruge den opsætningskode, du skrev i opstartsscriptet.</p>
+    <a class="btn big" href="{{.Data.Signup}}">Opret din konto</a>
+  {{else}}
+    <p class="muted small">Når alt er grønt, kan du oprette din konto på {{.Data.Signup}} med den opsætningskode, du skrev i opstartsscriptet.</p>
+  {{end}}
+</section>
+{{end}}

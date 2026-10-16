@@ -1,0 +1,27 @@
+{{define "content"}}
+<section class="narrow card">
+  <p class="step">Trin 3 af 3 · Godkend</p>
+  <h1>Vil du give {{if .Data.Client}}{{.Data.Client}}{{else}}dit AI-værktøj{{end}} adgang til din server?</h1>
+  <p class="muted">Du kan til enhver tid fjerne adgangen under «Forbind AI».</p>
+  <div class="two">
+    <div class="box"><h2 class="okc">Kan</h2><ul class="ticks">
+      <li class="yes">Se dine apps og deres status</li>
+      <li class="yes">Udgive nye apps og opdateringer (nye apps først efter din godkendelse)</li>
+      <li class="yes">Læse fejl og ændre almindelige indstillinger</li></ul></div>
+    <div class="box"><h2 class="badc">Kan ikke</h2><ul class="ticks">
+      <li class="no">Se dine hemmeligheder, fx adgangsnøgler</li>
+      <li class="no">Slette dine apps eller din data</li>
+      <li class="no">Ændre serveren eller din konto</li></ul></div>
+  </div>
+  <form method="post" action="/authorize" class="actions">
+    <input type="hidden" name="response_type" value="code">
+    <input type="hidden" name="code_challenge_method" value="S256">
+    <input type="hidden" name="client_id" value="{{.Data.P.ClientID}}">
+    <input type="hidden" name="redirect_uri" value="{{.Data.P.RedirectURI}}">
+    <input type="hidden" name="state" value="{{.Data.P.State}}">
+    <input type="hidden" name="code_challenge" value="{{.Data.P.Challenge}}">
+    <button class="btn ghost big" name="decision" value="deny">Afvis</button>
+    <button class="btn big" name="decision" value="allow">Tillad</button>
+  </form>
+</section>
+{{end}}

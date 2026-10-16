@@ -1,0 +1,204 @@
+{{define "content"}}
+{{$a := .Data.A}}
+<p><a href="/">← Alle apps</a></p>
+<div class="head">
+  <div>
+    <h1>{{$a.Name}} <span class="status {{$a.Class}}"><i></i>{{$a.Label}}</span></h1>
+    <p class="muted">{{$a.URL}}</p>
+  </div>
+  {{if eq $a.Status "live"}}<a class="btn" href="{{$a.URL}}" target="_blank" rel="noopener">Åbn appen</a>{{end}}
+</div>
+
+{{if eq $a.Status "waiting"}}
+<div class="note warn block">
+  <b>Claude vil udgive «{{$a.Name}}»</b>
+  <p>Appen bliver tilgængelig på <b>{{$a.URL}}</b>. Den er privat, indtil du selv deler den.</p>
+  <div class="actions left">
+    <form method="post" action="/apps/{{$a.Slug}}/approve"><button class="btn">Godkend og udgiv</button></form>
+    <form method="post" action="/apps/{{$a.Slug}}/reject"><button class="btn ghost">Afvis</button></form>
+  </div>
+</div>
+{{end}}
+
+{{if $a.Missing}}
+<div class="note warn block"><b>Claude venter på en hemmelighed:</b> {{range $i, $k := $a.Missing}}{{if $i}}, {{end}}<code>{{$k}}</code>{{end}}.
+  <a href="/apps/{{$a.Slug}}?tab=indstillinger">Indsæt den nu</a></div>
+{{end}}
+
+{{if eq $a.Status "failed"}}
+<div class="note bad block"><b>Der gik noget galt.</b> {{$a.StatusText}}
+  <p>Skriv dette til Claude, så retter den det:</p>
+  <div class="urlbox"><code id="prompt">{{.Data.Prompt}}</code><button class="btn light" type="button" data-copy="prompt">Kopiér</button></div>
+</div>
+{{else if and (eq $a.Status "live") $a.StatusText}}
+<div class="note warn block">{{$a.StatusText}}</div>
+{{end}}
+
+{{if $a.NeedsRestart}}
+<div class="note idle block">Du har ændret indstillinger. Genstart appen for at anvende dem.
+  <form method="post" action="/apps/{{$a.Slug}}/restart" class="inline"><button class="btn">Genstart appen</button></form></div>
+{{end}}
+
+<nav class="tabs" aria-label="Appens sider">
+  <a href="?tab=oversigt" {{if eq .Data.Tab "oversigt"}}class="on" aria-current="page"{{end}}>Oversigt</a>
+  <a href="?tab=versioner" {{if eq .Data.Tab "versioner"}}class="on" aria-current="page"{{end}}>Versioner</a>
+  <a href="?tab=data" {{if eq .Data.Tab "data"}}class="on" aria-current="page"{{end}}>Data</a>
+  <a href="?tab=log" {{if eq .Data.Tab "log"}}class="on" aria-current="page"{{end}}>Log</a>
+  <a href="?tab=indstillinger" {{if eq .Data.Tab "indstillinger"}}class="on" aria-current="page"{{end}}>Indstillinger</a>
+</nav>
+
+{{if eq .Data.Tab "oversigt"}}
+<section class="card">
+  <h2>{{if eq $a.Status "live"}}Alt ser fint ud{{else}}Status: {{$a.Label}}{{end}}</h2>
+  <dl class="facts">
+    <dt>Kørende version</dt><dd>{{if $a.Current}}{{$a.Current}}{{else}}ingen endnu{{end}}</dd>
+    <dt>Sidst opdateret</dt><dd>{{$a.Ago}}</dd>
+    <dt>Adresse</dt><dd>{{$a.URL}}</dd>
+    {{with .Data.Usage}}
+    {{if .CPU}}<dt>CPU</dt><dd>{{.CPU}} af én kerne</dd>
+    <dt>Hukommelse</dt><dd>{{.Mem}}</dd>{{end}}
+    <dt>Data på disken</dt><dd>{{.Data}} · backups {{.Backups}}</dd>
+    {{end}}
+  </dl>
+  <div class="actions left">
+    {{if eq $a.Status "live"}}<form method="post" action="/apps/{{$a.Slug}}/stop"><button class="btn ghost">Sæt på pause</button></form>{{end}}
+    {{if and $a.Current (ne $a.Status "building")}}<form method="post" action="/apps/{{$a.Slug}}/restart"><button class="btn ghost">{{if eq $a.Status "stopped"}}Start igen{{else}}Genstart{{end}}</button></form>{{end}}
+  </div>
+</section>
+{{end}}
+
+{{if eq .Data.Tab "versioner"}}
+<section class="card flush">
+  <h2 class="pad">Tidligere udgivelser</h2>
+  <ul class="versions">
+  {{range .Data.Versions}}
+    <li class="{{if .Current}}cur{{end}}">
+      <div><b>Version {{.N}}</b>{{if .Note}} · {{.Note}}{{end}}<br><span class="muted small">{{.Ago}}{{if .Failed}} · fejlede{{end}}{{if .Pruned}} · ryddet op{{end}}</span></div>
+      {{if .Current}}<span class="status ok"><i></i>Kører nu</span>
+      {{else if .CanBack}}<form method="post" action="/apps/{{$a.Slug}}/rollback"><input type="hidden" name="version" value="{{.N}}"><button class="btn ghost">Gå tilbage til denne</button></form>{{end}}
+    </li>
+  {{end}}
+  </ul>
+</section>
+{{end}}
+
+{{if eq .Data.Tab "data"}}
+<section class="card">
+  <h2>Appens data</h2>
+  <p class="muted">Appen gemmer sine ting i mappen <code>/data</code>. Den overlever genstarter og nye versioner. Alt andet i appen starter forfra.</p>
+  <p>{{if .Data.HasData}}Der ligger data i mappen.{{else}}Appen har ikke gemt noget endnu.{{end}}</p>
+  <p class="muted small">Der tages automatisk backup én gang i døgnet og før hver ny version. De seneste 10 gemmes.</p>
+  <form method="post" action="/apps/{{$a.Slug}}/backup"><button class="btn ghost">Tag backup nu</button></form>
+</section>
+<section class="card flush">
+  <h2 class="pad">Backups</h2>
+  <ul class="versions">
+  {{range .Data.Backups}}
+    <li><div><b>{{.Ago}}</b><br><span class="muted small">{{.Time.Format "02-01-2006 15:04"}} · {{.Size}}</span></div>
+      <form method="post" action="/apps/{{$a.Slug}}/restore"><input type="hidden" name="name" value="{{.Name}}"><button class="btn ghost">Gendan</button></form></li>
+  {{else}}
+    <li><span class="muted">Ingen backups endnu.</span></li>
+  {{end}}
+  </ul>
+  <p class="pad muted small">Gendanner du, gemmes den nuværende data først som en ny backup, så du kan fortryde.</p>
+</section>
+{{end}}
+
+{{if eq .Data.Tab "log"}}
+<section class="card">
+  <h2>Log</h2>
+  {{if $a.StatusText}}<p class="muted">{{$a.StatusText}}</p>{{end}}
+  <pre class="log">{{if .Data.Log}}{{.Data.Log}}{{else}}(ingen log endnu){{end}}</pre>
+</section>
+{{end}}
+
+{{if eq .Data.Tab "indstillinger"}}
+<section class="card">
+  <h2>Variabler</h2>
+  <p class="muted">Almindelige indstillinger, som må være synlige.</p>
+  <form method="post" action="/apps/{{$a.Slug}}/env" class="stack">
+    {{range .Data.EnvRows}}<div class="kv"><input name="key" value="{{.Key}}" aria-label="Navn"><input name="value" value="{{.Value}}" aria-label="Værdi for {{.Key}}"></div>{{end}}
+    <div class="kv"><input name="key" placeholder="NAVN" aria-label="Nyt variabelnavn"><input name="value" placeholder="værdi" aria-label="Ny værdi"></div>
+    <div class="kv"><input name="key" placeholder="NAVN" aria-label="Nyt variabelnavn"><input name="value" placeholder="værdi" aria-label="Ny værdi"></div>
+    <div><button class="btn">Gem variabler</button></div>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Hemmeligheder</h2>
+  <p class="muted">Til adgangskoder og nøgler, fx til en database eller en mailserver. Hver hemmelighed har et variabelnavn,
+    og appen læser værdien som en miljøvariabel med det navn (fx <code>DB_PASSWORD</code>).
+    Værdien er skjult: hverken du eller Claude kan se den igen, kun erstatte den.</p>
+  {{range $a.Secrets}}
+  <form method="post" action="/apps/{{$a.Slug}}/secret" class="kv secret">
+    <code>{{.Key}}</code><input type="hidden" name="key" value="{{.Key}}">
+    {{if .Value}}<span class="status ok"><i></i>Gemt</span><input type="password" name="value" placeholder="Ny værdi" autocomplete="off" aria-label="Ny værdi for {{.Key}}"><button class="btn ghost">Erstat</button>
+    {{else}}<span class="status warn"><i></i>Mangler</span><input type="password" name="value" placeholder="Indsæt hemmeligheden her" autocomplete="off" aria-label="Værdi for {{.Key}}"><button class="btn">Gem</button>{{end}}
+  </form>
+  {{end}}
+  <h3>Tilføj en hemmelighed</h3>
+  <form method="post" action="/apps/{{$a.Slug}}/newsecret" class="kv secret">
+    <input name="key" placeholder="VARIABELNAVN" required pattern="[A-Za-z_][A-Za-z0-9_]{0,63}" title="Bogstaver, tal og _ (må ikke starte med et tal)" aria-label="Variabelnavn for den nye hemmelighed">
+    <span></span>
+    <input type="password" name="value" placeholder="Værdi (kan udfyldes senere)" autocomplete="new-password" aria-label="Værdi for den nye hemmelighed">
+    <button class="btn">Tilføj</button>
+  </form>
+  <p class="muted small">Eksempler: <code>DB_PASSWORD</code>, <code>DATABASE_URL</code>, <code>SMTP_HOST</code>, <code>SMTP_PASSWORD</code>. Lader du værdien stå tom, oprettes en tom plads, som du udfylder senere.</p>
+</section>
+
+<section class="card">
+  <h2>Hvem kan åbne appen?</h2>
+  <p class="muted">Alle, der åbner appens adresse, skal logge ind, medmindre den er offentlig. Serverens ejer kan altid åbne alt.</p>
+  <form method="post" action="/apps/{{$a.Slug}}/access" class="stack">
+    <label class="opt"><input type="radio" name="visibility" value="private" {{if or (eq $a.Visibility "private") (eq $a.Visibility "")}}checked{{end}}> Kun mig</label>
+    <label class="opt"><input type="radio" name="visibility" value="shared" {{if eq $a.Visibility "shared"}}checked{{end}}> Udvalgte personer</label>
+    <div class="indent">
+      {{range .Data.People}}<label class="opt"><input type="checkbox" name="user" value="{{.ID}}" {{if .Checked}}checked{{end}}> {{.Name}}</label>
+      {{else}}<p class="muted small">Ingen andre har en konto endnu. Ejeren kan invitere folk under «Personer».</p>{{end}}
+    </div>
+    <label class="opt"><input type="radio" name="visibility" value="members" {{if eq $a.Visibility "members"}}checked{{end}}> Alle med konto på serveren</label>
+    <label class="opt"><input type="radio" name="visibility" value="public" {{if eq $a.Visibility "public"}}checked{{end}}> Offentlig: alle på internettet, uden login</label>
+    <div><button class="btn">Gem deling</button></div>
+  </form>
+</section>
+
+{{with .Data.Git}}
+<section class="card">
+  <h2>Hentes fra git</h2>
+  {{if .Repo}}<p><b class="mono">{{.Repo}}</b>{{if .Branch}} · gren <code>{{.Branch}}</code>{{end}}</p>{{end}}
+  {{if .Public}}
+  <p class="muted">Deploy key til private repos. Tilføj den i repoets indstillinger under «Deploy keys» med kun læseadgang{{if .AddURL}} (<a href="{{.AddURL}}" target="_blank" rel="noopener">åbn siden</a>){{end}}.</p>
+  <div class="urlbox"><code id="gitkey">{{.Public}}</code><button class="btn light" type="button" data-copy="gitkey">Kopiér</button></div>
+  {{end}}
+  <div class="actions left">
+    {{if $a.Git}}<form method="post" action="/apps/{{$a.Slug}}/gitdeploy"><button class="btn">Hent nyeste version fra git</button></form>{{end}}
+    {{if .Public}}<form method="post" action="/apps/{{$a.Slug}}/gitrekey"><button class="btn ghost">Lav en ny nøgle</button></form>{{end}}
+  </div>
+</section>
+{{end}}
+
+{{if $a.FromImage}}
+<section class="card">
+  <h2>Færdigt image</h2>
+  <p><b class="mono">{{$a.FromImage}}</b></p>
+  <p class="muted">Appen hentes som et færdigt image i stedet for at blive bygget. Er imaget privat, står login i
+    <code>DOCKER_BRUGERNAVN</code> og <code>DOCKER_TOKEN</code> under Hemmeligheder; det bruges kun til at hente imaget og sendes ikke ind i appen.</p>
+  <div class="actions left">
+    <form method="post" action="/apps/{{$a.Slug}}/imagedeploy"><button class="btn">Hent nyeste udgave</button></form>
+  </div>
+</section>
+{{end}}
+
+<section class="card">
+  <h2>Adresse</h2>
+  <p><b>{{$a.URL}}</b></p>
+  <p class="muted small">Eget domæne og skift af navn kommer senere.</p>
+</section>
+
+<section class="card">
+  <h2>Slet app</h2>
+  <p class="muted">Fjerner appen, dens versioner, log, data og backups. Det kan ikke fortrydes. Skriv appens navn for at bekræfte.</p>
+  <form method="post" action="/apps/{{$a.Slug}}/delete" class="inline"><input name="confirm" placeholder="{{$a.Name}}" aria-label="Skriv appens navn"><button class="btn danger">Slet</button></form>
+</section>
+{{end}}
+{{end}}

@@ -1,0 +1,41 @@
+{{define "content"}}
+<div class="head"><div><h1>Personer</h1><p class="muted">Du er ejer af serveren og kan invitere familie eller kolleger.</p></div></div>
+
+<section class="card">
+  <h2>Inviter en person</h2>
+  <p class="muted">Du får et link, som du sender videre. Det virker én gang i 7 dage.</p>
+  {{if .Data.NewLink}}
+    <div class="note warn">Kopiér linket nu og send det til personen.</div>
+    <div class="urlbox"><code id="invlink">{{.Data.NewLink}}</code><button class="btn light" type="button" data-copy="invlink">Kopiér</button></div>
+  {{end}}
+  <form method="post" action="/people/invite" class="stack">
+    <label class="opt"><input type="checkbox" name="builder"> Må også forbinde en AI og bygge egne apps</label>
+    <div><button class="btn">Opret invitation</button></div>
+  </form>
+  {{if .Data.Invites}}
+  <h2 class="gap">Ventende invitationer</h2>
+  <ul class="plain">{{range .Data.Invites}}
+    <li class="rowline"><span>Oprettet {{.Ago}}{{if .Builder}} · må bygge{{else}} · kan kun åbne delte apps{{end}}</span>
+      <form method="post" action="/people/invite/{{.Token}}/revoke"><button class="btn ghost">Fortryd</button></form></li>
+  {{end}}</ul>
+  {{end}}
+</section>
+
+<section class="card flush">
+  <h2 class="pad">Konti</h2>
+  <ul class="versions">
+  {{range .Data.People}}
+    <li>
+      <div><b>{{.Name}}</b> <span class="chip">{{if eq .Role "owner"}}Ejer{{else if .Builder}}Bygger{{else}}Bruger{{end}}</span><br>
+        <span class="muted small">{{.Email}} · {{.Apps}} {{if eq .Apps 1}}app{{else}}apps{{end}}</span></div>
+      {{if ne .Role "owner"}}
+      <div class="actions left">
+        <form method="post" action="/people/user/{{.ID}}/builder"><button class="btn ghost">{{if .Builder}}Fjern bygge-ret{{else}}Giv bygge-ret{{end}}</button></form>
+        <form method="post" action="/people/user/{{.ID}}/remove"><button class="btn danger">Fjern</button></form>
+      </div>
+      {{end}}
+    </li>
+  {{end}}
+  </ul>
+</section>
+{{end}}

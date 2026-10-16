@@ -1,0 +1,19 @@
+#cloud-config
+# Vibe Deploy uden terminal: kopiér denne fil ind i Hetzners felt «Cloud config», når du opretter serveren
+# (Ubuntu 24.04, mindst 2 GB RAM), og ret de tre værdier herunder.
+#
+# Den kører samme installation som:  curl -fsSL …/install.sh | sh
+# Åbn derefter http://SERVERENS-IP efter 3-5 minutter: siden viser, når DNS og https er klar,
+# og sender dig videre til at oprette din konto med opsætningskoden herunder.
+# Forløbet står i /var/log/vibedeploy-install.log.
+
+runcmd:
+  - - sh
+    - -c
+    - >-
+      set -o pipefail 2>/dev/null;
+      curl -fsSL https://github.com/nicklasjeppesen/vibedeploy/releases/latest/download/install.sh |
+      VIBEDEPLOY_DOMAIN='dit-domæne.dk'
+      VIBEDEPLOY_EMAIL='din@email.dk'
+      VIBEDEPLOY_SETUP_CODE='vælg-en-lang-kode-selv'
+      sh 2>&1 | tee /var/log/vibedeploy-install.log

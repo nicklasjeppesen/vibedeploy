@@ -1,0 +1,21 @@
+{{define "layout"}}<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · Vibe Deploy</title>
+{{if .Refresh}}<meta http-equiv="refresh" content="{{.RefreshSecs}}">{{end}}
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/"><svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="8" fill="#0B6E6E"/><path d="M8 15l6-7 6 7M14 8v13" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Vibe Deploy</a>
+  {{if .User}}<nav><a href="/">Dine apps</a>{{if or .User.Builder (eq .User.Role "owner")}}<a href="/connect">Forbind AI</a>{{end}}{{if eq .User.Role "owner"}}<a href="/server">Server</a><a href="/people">Personer</a>{{end}}<form method="post" action="/logout"><button class="linkbtn">Log ud</button></form></nav>{{end}}
+</header>
+<main>
+{{if .Msg}}<div class="flash" role="status">{{.Msg}}</div>{{end}}
+{{template "content" .}}
+</main>
+</body>
+</html>{{end}}

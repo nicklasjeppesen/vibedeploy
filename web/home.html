@@ -1,0 +1,29 @@
+{{define "content"}}
+<div class="head"><div>
+  <h1>Dine apps</h1>
+  <p class="muted">{{if .Data.Summary}}{{.Data.Summary}}.{{else}}Ingen apps endnu.{{end}}</p>
+</div></div>
+{{if .Data.Alert}}<div class="note bad block"><b>Serveren er ved at løbe tør:</b> {{.Data.Alert}} <a href="/server">Se hvad der fylder</a></div>{{end}}
+<div class="grid">
+{{range .Data.Apps}}
+  <article class="card app">
+    <div class="row"><h2>{{.Name}}</h2><span class="status {{.Class}}"><i></i>{{.Label}}</span></div>
+    <p class="muted">{{.URL}}</p>
+    <p class="small">{{if .Manage}}<span class="chip">{{.VisLabel}}</span>{{else}}<span class="muted">Delt af {{.Owner}}</span>{{end}}</p>
+    <p class="muted small">{{if .StatusText}}{{.StatusText}}{{else}}Opdateret {{.Ago}}{{end}}</p>
+    {{if .Manage}}{{if eq .Status "waiting"}}<a class="btn warnbtn" href="/apps/{{.Slug}}">Se og godkend</a>{{else}}<a class="btn" href="/apps/{{.Slug}}">Åbn</a>{{end}}
+    {{else}}<a class="btn" href="{{.URL}}">Åbn appen</a>{{end}}
+  </article>
+{{end}}
+  <article class="card empty">
+  {{if .Data.CanBuild}}
+    <h2>Klar til {{if .Data.Apps}}den næste{{else}}din første app{{end}}?</h2>
+    <p class="muted">{{if .Data.Connected}}Bed din AI om at udgive appen.{{else}}Forbind først din AI, og bed den derefter om at udgive en app.{{end}}</p>
+    {{if not .Data.Connected}}<a class="btn ghost" href="/connect">Forbind din AI</a>{{end}}
+  {{else}}
+    <h2>{{if .Data.Apps}}Det er alt, der er delt med dig{{else}}Ingen apps er delt med dig endnu{{end}}</h2>
+    <p class="muted">Når nogen deler en app med dig, dukker den op her.</p>
+  {{end}}
+  </article>
+</div>
+{{end}}

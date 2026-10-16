@@ -1,0 +1,56 @@
+{{define "content"}}
+<div class="head"><div>
+  <h1>Server</h1>
+  <p class="muted">{{if .Data.Measured}}Opdateres hvert 30. sekund.{{if .Data.Uptime}} Serveren har kørt i {{.Data.Uptime}}{{end}}{{else}}Den første måling tages lige nu …{{end}}</p>
+</div></div>
+
+<div class="tiles">
+{{range .Data.Tiles}}
+  <section class="card tile">
+    <div class="row"><h2>{{.Name}}</h2>{{if .Label}}<span class="status {{.Class}}"><i></i>{{.Label}}</span>{{end}}</div>
+    <p class="big">{{.Value}}</p>
+    {{if .OK}}<svg class="meter" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true"><rect class="track" width="100" height="8" rx="4"/><rect class="fill {{.Class}}" width="{{printf "%.1f" .Pct}}" height="8" rx="4"/></svg>{{end}}
+    <p class="muted small">{{.Detail}}</p>
+  </section>
+{{end}}
+</div>
+
+<section class="card">
+  <h2>Det seneste døgn</h2>
+  <p class="muted small">{{if .Data.Since}}Målt siden {{.Data.Since}}. Historikken starter forfra, når Vibe Deploy genstartes. Hold musen over grafen for at se tid og værdi.{{else}}Ingen målinger endnu.{{end}}</p>
+  <div class="charts">
+  {{range .Data.Charts}}
+    <figure class="chartbox"><figcaption>{{.Name}}</figcaption>{{.SVG}}</figure>
+  {{end}}
+  </div>
+</section>
+
+<section class="card flush">
+  <h2 class="pad">Apps</h2>
+  {{if .Data.Rows}}
+  <div class="tablewrap">
+  <table class="usage">
+    <thead><tr><th scope="col">App</th><th scope="col">Status</th><th scope="col" class="num">CPU</th><th scope="col" class="num">Hukommelse</th><th scope="col" class="num">Data</th><th scope="col" class="num">Backups</th><th scope="col" class="num">Versioner</th></tr></thead>
+    <tbody>
+    {{range .Data.Rows}}
+      <tr><th scope="row"><a href="/apps/{{.Slug}}">{{.Name}}</a></th><td><span class="status {{.Class}}"><i></i>{{.Status}}</span></td>
+        <td class="num">{{.CPU}}</td><td class="num">{{.Mem}}</td><td class="num">{{.Data}}</td><td class="num">{{.Backups}}</td><td class="num">{{.Files}}</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  <p class="muted small pad">{{if .Data.Docker}}CPU er i procent af én kerne. Hver app må højst bruge 1 CPU og 512 MB.{{else}}CPU og hukommelse pr. app måles kun med Docker.{{end}} Diskforbruget pr. app måles hvert 10. minut.</p>
+  {{else}}
+  <p class="muted pad">Ingen apps endnu.</p>
+  {{end}}
+</section>
+
+<section class="card">
+  <h2>Hvad fylder på disken</h2>
+  <ul class="plain">
+  {{range .Data.Parts}}
+    <li class="rowline"><span>{{.Name}}<br><span class="muted small">{{.Hint}}</span></span><b>{{.Size}}</b></li>
+  {{end}}
+  </ul>
+</section>
+{{end}}

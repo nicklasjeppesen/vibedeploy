@@ -1,0 +1,7 @@
+{{define "content"}}
+<section class="narrow card">
+  <h1>{{.Title}}</h1>
+  <p style="white-space:pre-wrap;overflow-wrap:anywhere">{{.Data.Text}}</p>
+  <p><a class="btn" href="{{if .Data.Back}}{{.Data.Back}}{{else}}/{{end}}">Tilbage</a></p>
+</section>
+{{end}}
