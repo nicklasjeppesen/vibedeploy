@@ -65,6 +65,12 @@ Den overlever genstarter, nye versioner og rollback. Alt andet i containeren sta
 Der tages backup af `/data` én gang i døgnet og før hver ny version; de seneste 10 gemmes.
 Under fanen **Data** kan ejeren tage en backup og gendanne en tidligere. Ved gendannelse gemmes den nuværende data først.
 
+**Udrulning uden nedetid:** En ny version (og en genstart eller rollback) startes ved siden af den gamle, i sin
+egen container på en ny port. Først når den svarer på `/health`, flyttes trafikken over i ét skridt, og den gamle
+container lukkes pænt 10 sekunder efter. Mens en ny version bygges, får besøgende stadig den gamle. Fejler den nye,
+mærker de intet. De to containere deler `/data` et kort øjeblik, så brug SQLite med WAL.
+Kun gendannelse af en backup stopper appen kort, så data ikke ændres undervejs.
+
 **Oprydning:** De 5 nyeste versioner (og den, der kører) beholder filer og image til rollback. Ældre ryddes op.
 Logfiler roteres ved 2 MB.
 
@@ -103,6 +109,8 @@ Serveren har **én ejer**, som inviterer andre (familie, kolleger):
 ## Sådan virker koden
 
 Se `ARCHITECTURE.md` for opbygningen: login-flows, bygge-pipelinen, lagring, git og routing.
+AI-agenter, der arbejder på koden, starter med `AGENTS.md` (Claude Code læser den via `CLAUDE.md`).
+Skill'en `.claude/skills/vibedeploy-release` beskriver, hvordan en ny, signeret version udgives.
 
 ## På en rigtig server
 
@@ -113,6 +121,14 @@ curl -fsSL https://github.com/nicklasjeppesen/vibedeploy/releases/latest/downloa
 ```
 
 Se `DEPLOY.md` for detaljer, installation uden terminal (Hetzners «Cloud config») og den manuelle vej. Den første konto kræver en opsætningskode: `vibedeploy install` viser den, og ellers står den i serverens log.
+
+**Opdatering af Vibe Deploy:** siden **Server** viser, når der er en ny version. Tryk «Opdater nu», eller lad den
+opdatere sig selv på et tidspunkt, du vælger (hver dag eller en bestemt ugedag, i den tidszone du vælger; standard er dansk tid). Kun releases signeret med projektets nøgle installeres, og svarer den nye version ikke,
+lægges den gamle tilbage. Appene kører videre under opdateringen. Før den første release skal du lave en signeringsnøgle:
+se «Signering» i `DEPLOY.md`, også om hvad du gør, hvis nøglen bliver væk eller lækker. Signeringsnøglen
+(`release-signing.key`) er ikke det samme som serverens `secret.key`, der krypterer appenes hemmeligheder.
+
+Kommandoer: `vibedeploy version`, `vibedeploy update [-check]`, `vibedeploy keygen` og `vibedeploy sign` (til releases).
 
 ## Prøv det
 
@@ -132,6 +148,8 @@ Godkend i dashboardet, og åbn adressen.
 | Serverens CPU, hukommelse og disk (siden «Server») | `metrics*.go`, `serverpage.go` |
 | Statusside på serverens IP under installationen | `setup.go` |
 | Installation: `install.sh` og `vibedeploy install` | `install.sh`, `install.go` |
+| Opdatering af Vibe Deploy selv (tjek, knap, `vibedeploy update`, tilbagerulning) | `update.go`, `deploy/vibedeploy-update.*` |
+| Signerede releases og versionsnummer | `release.go`, `releasekey.go`, `version.go` |
 | Hentning fra git og deploy keys | `gitdeploy.go` |
 | Færdige images fra Docker Hub/ghcr og registry-login | `imagedeploy.go` |
 | Upload, data, backups, oprydning | `data.go` |
@@ -153,9 +171,15 @@ Fejler en ny version, kører den forrige videre.
 - Login-sessioner og AI-tokens gemmes ukrypteret i `state.db` (som før i state.json). Kun hemmeligheder krypteres.
 - Historikken på siden «Server» ligger kun i hukommelsen og starter forfra, når Vibe Deploy genstartes.
 - `install.sh` og `vibedeploy install` er tjekket for syntaks og med tests, og Caddyfilen er valideret med Caddy, men hele installationen er ikke kørt på en rigtig server endnu.
+- `vibedeploy update` er kørt for alvor (som root, med rigtige binærer, signatur og tilbagerulning), men med en falsk
+  `systemctl`. De to systemd-enheder og `lb_try_duration` i Caddy er ikke afprøvet på en rigtig server.
+- Opdateringen af Vibe Deploy har kun én kanal (nyeste release). Der er ingen beta-kanal og ingen mulighed for at
+  springe en bestemt version over, ud over at en version, der er rullet tilbage, ikke prøves igen automatisk.
 - Backup tages, mens appen kører. En app, der skriver i en database lige i det øjeblik, kan give en backup, der ikke er helt konsistent. Brug SQLite med WAL, eller stop appen før en manuel backup.
 - `/data`-mappen har skriveadgang for alle (0777), fordi containere ofte kører som en anden bruger end serveren. Forældremappen er lukket (0700), så andre brugere på maskinen kan ikke komme ind.
 - Én container og én port pr. app: ingen separat database eller flere tjenester (docker-compose).
+- Udrulning uden nedetid er testet med demo-runtime'n, ikke mod rigtig Docker. En app, der ændrer sin database
+  ved opstart (migrationer), skal kunne tåle, at den forrige version kører kort samtidig.
 - Ingen begrænsning af loginforsøg ud over en kort forsinkelse.
 - Intet https lokalt. Brug Caddy foran på en rigtig server.
 - Serveren kan starte containere, så den, der kan logge ind, har i praksis stor magt på maskinen.

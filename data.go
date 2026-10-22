@@ -269,7 +269,7 @@ func (m *Manager) Restore(slug, name string) error {
 	l := m.lockFor(slug)
 	l.Lock()
 	defer l.Unlock()
-	_ = m.rt.Stop(slug)
+	m.stopAll(slug) // data må ikke ændres under appen, så her er der en kort pause
 	if _, err := m.Backup(slug, "før gendannelse"); err != nil {
 		return fmt.Errorf("kunne ikke tage backup af nuværende data: %v", err)
 	}

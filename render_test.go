@@ -30,7 +30,20 @@ func TestAllPagesRender(t *testing.T) {
 		"Charts":   []chart{{"CPU", lineChart("CPU", []Sample{{T: time.Now().Add(-time.Minute), CPU: 10}, {T: time.Now(), CPU: 50}}, func(x Sample) float64 { return x.CPU })}},
 		"Measured": true, "Uptime": "2 t. 3 min.", "Since": "for 5 min. siden", "Docker": true,
 		"Rows":  []UsageRow{{Name: "Blog", Slug: "blog", Status: "Live", Class: "ok", CPU: "1 %", Mem: "20 MB af 512 MB"}},
-		"Parts": []struct{ Name, Size, Hint string }{{"Backups", "1 MB", "x"}}}
+		"Parts": []struct{ Name, Size, Hint string }{{"Backups", "1 MB", "x"}},
+		"Self": map[string]any{"Version": "v0.2.0", "Release": true, "Installed": true, "HasKey": true, "CanUpdate": true,
+			"Latest": "v0.3.0", "Notes": "https://x", "Checked": "nu", "CheckErr": "timeout", "Auto": true,
+			"Status": UpdateStatus{State: "rolledback", Message: "v0.3.0 svarede ikke"}, "StatusAgo": "i går",
+			"Days": []struct {
+				Key, Label string
+				Selected   bool
+			}{{"daily", "Hver dag", false}, {"sun", "Søndag", true}}, "At": "03:00", "Schedule": "hver søndag kl. 03:00", "Next": "søndag 25. oktober kl. 03:00",
+			"TZ": "Europe/Copenhagen", "TZLabel": "Danmark (København)", "TZOther": false,
+			"TZs": []struct {
+				Zone, Label string
+				Selected    bool
+			}{{"Europe/Copenhagen", "Danmark (København) · UTC+1", true}, {"UTC", "UTC (verdenstid) · UTC", false}}}}
+	cases["server.html#dev"] = map[string]any{"Self": map[string]any{"Version": "dev"}}
 	cases["setup.html"] = map[string]any{"Checks": []SetupCheck{{Name: "DNS", OK: false, Detail: "x"}, {Name: "Vibe Deploy kører", OK: true}}, "Domain": "d.dk", "IP": "1.2.3.4", "Signup": "https://d.dk/signup"}
 	cases["home.html"]["Alert"] = "Disken er 95 % fuld."
 	for _, tab := range []string{"oversigt", "versioner", "data", "log", "indstillinger"} {

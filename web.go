@@ -59,6 +59,10 @@ func flashText(code string) string {
 		"gitfetched":   "Nyeste version hentes fra git og bygges nu.",
 		"rekeyed":      "Nøglen er slettet. Næste hentning laver en ny, som skal tilføjes i repoet igen.",
 		"imagefetched": "Nyeste udgave af imaget hentes nu.",
+		"updating":     "Opdateringen er startet. Vibe Deploy genstarter om lidt, og siden er væk et øjeblik; dine apps kører videre.",
+		"checked":      "Tjekket for en ny version.",
+		"autoon":       "Gemt. Nye versioner installeres automatisk på det valgte tidspunkt.",
+		"autooff":      "Automatisk opdatering er slået fra.",
 	}[code]
 }
 
@@ -123,6 +127,7 @@ func (s *Server) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /static/{file}", s.static)
 	mux.HandleFunc("GET /internal/tls-ask", s.tlsAsk)
+	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.HandleFunc("GET /{$}", s.requireUser(s.dashboard))
 	mux.HandleFunc("GET /signup", s.signupPage)
 	mux.HandleFunc("POST /signup", s.signupSubmit)
@@ -132,6 +137,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /app-login", s.requireUser(s.appLogin))
 	mux.HandleFunc("GET /people", s.requireAdmin(s.peoplePage))
 	mux.HandleFunc("GET /server", s.requireAdmin(s.serverPage))
+	mux.HandleFunc("POST /server/update", s.requireAdmin(s.serverUpdate))
 	mux.HandleFunc("POST /people/invite", s.requireAdmin(s.peopleInvite))
 	mux.HandleFunc("POST /people/invite/{token}/revoke", s.requireAdmin(s.peopleRevokeInvite))
 	mux.HandleFunc("POST /people/user/{id}/{action}", s.requireAdmin(s.peopleAction))
@@ -170,6 +176,8 @@ func (s *Server) handler() http.Handler {
 			switch {
 			case r.URL.Path == "/":
 				s.setupStatus(w, r)
+			case r.URL.Path == "/healthz": // opdateringen spørger på 127.0.0.1
+				mux.ServeHTTP(w, r)
 			case strings.HasPrefix(r.URL.Path, "/static/"):
 				mux.ServeHTTP(w, r)
 			default:
@@ -224,7 +232,7 @@ func (s *Server) proxyApp(w http.ResponseWriter, r *http.Request, slug string) {
 		return
 	}
 	stripCookie(r, appCookie)
-	if app.Status != StatusLive && !(app.Status == StatusStarting && app.Current > 0) {
+	if !serving(app) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Retry-After", "5")
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -239,6 +247,18 @@ func (s *Server) proxyApp(w http.ResponseWriter, r *http.Request, slug string) {
 		http.Error(w, "Appen svarer ikke lige nu.", http.StatusBadGateway)
 	}
 	rp.ServeHTTP(w, r)
+}
+
+// serving afgør, om appens trafik skal sendes videre til containeren. Mens en ny version bygges
+// eller starter, kører den forrige stadig (udrulning uden nedetid), så besøgende sendes til den.
+func serving(a App) bool {
+	switch a.Status {
+	case StatusLive:
+		return true
+	case StatusBuilding, StatusStarting:
+		return a.Current > 0
+	}
+	return false
 }
 
 // template_escape HTML-escaper s til den simple ventende side i proxyApp.

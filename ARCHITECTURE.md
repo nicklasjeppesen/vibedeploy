@@ -39,7 +39,10 @@ Vibe Deploy er ét Go-program (standardbiblioteket plus `modernc.org/sqlite`), d
 | `buildguide.go` | Byggevejledningen til AI'en (`get_build_guide`) og tjek af Dockerfile |
 | `metrics.go`, `metrics_*.go` | `Monitor`: måler CPU, hukommelse, disk og hver apps forbrug (Linux via /proc, macOS via sysctl) |
 | `serverpage.go` | Siden «Server» med nøgletal, SVG-grafer og forbrug pr. app |
-| `install.go` | `vibedeploy install`: bruger, nøgle, opsætningskode, systemd og Caddyfile (skabeloner fra `deploy/`, indlejret) |
+| `install.go` | `vibedeploy install`: bruger, nøgle, opsætningskode, systemd, opdateringsenheder og Caddyfile (skabeloner fra `deploy/`, indlejret) |
+| `update.go` | Opdatering af Vibe Deploy selv: `Updater` (tjek, knap, nat) og `vibedeploy update` (root-delen, tilbagerulning), `/healthz` |
+| `release.go`, `releasekey.go` | Signerede releases: `release.json` + ed25519-signatur, `keygen`, `sign`, verifikation og hentning |
+| `version.go` | `version` (sættes med `-ldflags`) og sammenligning af versioner |
 | `setup.go` | Statussiden på `http://<IP>` under installationen (DNS og https) |
 | `auth.go` | Adgangskoder (PBKDF2), dashboard-sessioner, `requireUser`, CSRF-tjek |
 | `access.go` | Roller og synlighed (`canBuild`, `canManage`, `canOpen`), login foran apps, personer og invitationer |
@@ -51,16 +54,17 @@ Vibe Deploy er ét Go-program (standardbiblioteket plus `modernc.org/sqlite`), d
 | `runtime.go` | `Runtime`-interfacet og de to udgaver: Docker og demo |
 | `web.go` | Ruter, proxy til apps, dashboard-sider og knapperne på appens side |
 | `web/` | HTML-skabeloner, CSS og JS (indlejret i binæren med `go:embed`) |
-| `deploy/` | Caddyfile og systemd-tjeneste til en rigtig server |
+| `deploy/` | Caddyfile, systemd-tjenesten og de to enheder til opdatering (`vibedeploy-update.service`/`.path`) |
 
 ## Opstart (`main`)
 
+0. Underkommandoer: `install`, `update`, `version`, `keygen`, `sign` (se nedenfor og `DEPLOY.md`).
 1. Læser flag (`-addr`, `-domain`, `-data`, `-runtime`, `-public-url`).
-2. Læser nøglen til hemmeligheder (`keyPath`), åbner `data/state.db` med `OpenStore` (flytter en gammel `state.json` over) og migrerer gamle data (første bruger bliver ejer, apps uden synlighed bliver private).
+2. Læser nøglen til hemmeligheder (`keyPath`), åbner `data/state.db` med `OpenStore` (flytter en gammel `state.json` over) og migrerer gamle data (første bruger bliver ejer, apps uden synlighed bliver private). Er data skrevet med et nyere skema (`Settings.Schema` > `schemaVersion`), nægter den at starte.
 3. Vælger runtime: `docker` (tjekker, at Docker kører) eller `demo`.
 4. Er der ingen konti, og kører serveren ikke på `localhost`, udskrives en **opsætningskode**, som skal bruges til den første konto.
-5. `Manager.Reconcile` genstarter apps, der var live ved sidste nedlukning, og markerer afbrudte bygninger som fejlede.
-6. `DailyBackups` startes i baggrunden, og HTTP-serveren begynder at lytte.
+5. `Manager.Reconcile` overtager apps, hvis container stadig svarer (uden genstart), starter resten igen og markerer afbrudte bygninger som fejlede.
+6. `DailyBackups`, `Monitor` og `Updater` startes i baggrunden, og HTTP-serveren begynder at lytte. SIGTERM og Ctrl+C lukker pænt ned (højst 10 sekunder); appenes containere kører videre.
 
 ## Tilstand og lagring (`store.go`)
 
@@ -161,31 +165,48 @@ waiting ──Approve──▶ building ──Build ok──▶ (backup af /data
                         │                                            │                           │
                         └─────── fejl ─────────┬─────────────────────┘                    pruneVersions
                                                ▼
-                                 Kørte der en version før?
-                                   ja ──▶ start den igen → live («version N fejlede, N-1 kører stadig»)
-                                   nej ─▶ failed (med forklaring fra explain())
+                                 Kører den forrige version stadig?
+                                   ja ──▶ live, uden afbrydelse («version N fejlede, N-1 kører stadig»)
+                                   nej, men der er en ─▶ start den igen → live
+                                   ingen ─▶ failed (med forklaring fra explain())
 ```
+
+Den forrige version kører hele vejen igennem: proxyen sender trafik til den, mens den nye bygges og starter
+(`serving`: status `live`, eller `building`/`starting` med en kørende version).
 
 - `Runtime.Build` bygger imaget (`docker build`, højst 10 minutter). Har versionen `From` sat (deploy_image),
   kalder pipelinen i stedet `Runtime.Pull`: `docker pull` med en midlertidig, tom `DOCKER_CONFIG`, der kun indeholder
   appens login (`DOCKER_BRUGERNAVN`/`DOCKER_TOKEN`), og derefter `docker tag` til `vd-<slug>:v<N>`. Login sendes ikke ind i containeren (`envFor`).
-- `startVersion` starter containeren med `envFor(app)` (PORT, DATA_DIR, variabler, udfyldte hemmeligheder)
-  og venter op til 40 sekunder på, at appen svarer på `/health` (`waitHealthy`). Ethvert svar under 500 tæller, så apps uden `/health` (404) også godkendes; en app kan svare 503, indtil den er klar.
+- `startVersion` udruller uden nedetid («blue-green»). Hver app har to pladser, `vd-<slug>` og `vd-<slug>_b`
+  (`instName`); `App.Slot` er den aktive. Den nye container startes på den ledige plads og en ny port med
+  `envFor(app)` (PORT, DATA_DIR, variabler, udfyldte hemmeligheder), og serveren venter op til 40 sekunder på, at
+  den svarer på `/health` (`waitHealthy`). Ethvert svar under 500 tæller, så apps uden `/health` (404) også godkendes;
+  en app kan svare 503, indtil den er klar. Først da skiftes `HostPort` og `Slot` i ét skridt; proxyen læser
+  `HostPort` ved hver forespørgsel. Den gamle container lukkes efter `drainDelay` (10 sekunder) med SIGTERM
+  (`retire`), så forespørgsler i gang kan blive færdige. Svarer den nye ikke, fjernes den, og den gamle kører videre.
+- Pladslåsen (`slotLock`) dækker start → skift og `retire`, så en forsinket `retire` aldrig lukker en container,
+  som en ny udrulning lige har startet på samme plads. Appens lås (`lockFor`) holdes under hele bygningen og kan
+  ikke bruges til det.
+- Under overlappet deler de to containere `/data`. Byggevejledningen beder derfor om SQLite med WAL.
 - `pruneVersions` sletter filer og images fra gamle versioner (de 5 nyeste og den, der kører, beholdes).
 
 ### Andre handlinger
 
-- `Restart` / `Rollback` → `switchTo`: starter en allerede bygget version i baggrunden.
-- `Stop`: fjerner containeren; status `stopped`.
+- `Restart` / `Rollback` → `switchTo`: starter en allerede bygget version i baggrunden, også uden nedetid.
+- `Stop`: fjerner begge pladsers containere (`stopAll`); status `stopped`.
+- `Restore` (gendan backup af data): stopper appen kort, så data ikke ændres under den, og starter den igen.
 - `Delete`: fjerner container, versioner, data, backups, log og deploy key.
-- `Reconcile` (ved opstart): starter de apps, der var live, igen.
+- `Reconcile` (ved opstart): overtager apps, hvis container på `HostPort` svarer, og rydder kun den ubrugte plads op.
+  Svarer den ikke (fx efter en genstart af maskinen eller med demo-runtime'n), startes den nuværende version igen.
 
 ## Docker og demo (`runtime.go`)
 
 Alt, der rører containere, går gennem interfacet `Runtime` (`Build`, `Pull`, `Start`, `Stop`, `Logs`, `RemoveImage`).
+`Start`, `Stop` og `Logs` arbejder på én container (en plads), ikke på en hel app.
 
-- **`dockerRT`**: containeren hedder `vd-<slug>`, får højst 512 MB og 1 CPU, `--restart unless-stopped`,
-  `/data` monteret fra `volumes/<slug>`, og porten publiceres kun på `127.0.0.1:<HostPort>`.
+- **`dockerRT`**: containeren hedder `vd-<slug>` eller `vd-<slug>_b`, får højst 512 MB og 1 CPU, `--restart unless-stopped`,
+  `/data` monteret fra `volumes/<slug>`, og porten publiceres kun på `127.0.0.1:<port>`. `Stop` giver containeren
+  10 sekunder til at lukke pænt (`docker stop -t 10`) og fjerner den. `docker stats` lægger de to pladser sammen.
   Miljøvariabler sendes via en midlertidig fil (0600), så de ikke kan ses i procesoversigten.
 - **`demoRT`**: ingen Docker. «Bygningen» er en kort pause, og appen er en lille HTTP-server i samme proces,
   der serverer `index.html` fra appens mappe. Bruges til at prøve flowet og i testene.
@@ -228,6 +249,44 @@ Alt, der rører containere, går gennem interfacet `Runtime` (`Build`, `Pull`, `
 - `/internal/tls-ask` bruges af Caddy til on-demand TLS: der udstedes kun certifikater til hoveddomænet og
   til apps, der findes. Kun kald direkte fra samme maskine accepteres.
 
+## Opdatering af Vibe Deploy (`update.go`, `release.go`)
+
+```
+Server (bruger vibedeploy)                         systemd / root
+─────────────────────────                          ─────────────────────────────────────────────
+Updater.Run: hvert minut tick; hver time fetchRelease ──▶ «Ny version» på siden Server
+«Opdater nu» / ejerens tidspunkt med automatik
+  └─ Request: VACUUM INTO update-state-backup.db
+              + update-request ───────────────────▶ vibedeploy-update.path ser filen
+                                                    vibedeploy update:
+                                                      fetchRelease (signatur) → downloadVerified (SHA-256)
+                                                      «ny version» skal svare sin egen version
+                                                      stop → vibedeploy.prev (hård kobling) → ny på plads → start
+                                                      /healthz med ny version inden for 60 s?
+                                                        ja ─▶ status ok
+                                                        nej ─▶ gammel binær tilbage → start
+                                                               starter den ikke: backup af state.db tilbage → start
+                                                      update-status.json ──▶ vises på siden Server
+```
+
+- **Tillid:** `release.json` (version, link, SHA-256 pr. binær) signeres med ed25519 (`signContext` foran). Den offentlige
+  nøgle står i `releasekey.go`. Versionen er en del af det signerede, og der installeres kun en nyere version (`newer`),
+  så ingen kan sende serveren tilbage til en ældre. En udviklingsudgave (`version = "dev"`) opdaterer sig aldrig.
+- **Rettigheder:** serveren kan kun lægge en fil, der beder om «nyeste signerede release». Root-delen læser ikke filens
+  indhold, rører kun faste navne direkte i data-mappen og bruger `rename`/`remove`/`O_EXCL` (`writeFileAtomic`), som
+  ikke følger symlinks.
+- **Data:** `schemaVersion` hæves, når en version ændrer data, så en ældre ikke kan læse dem. Ved tilbagerulning prøves
+  den gamle version først på de nuværende data; kun hvis den ikke starter, lægges backuppen tilbage, og de nyere data
+  gemmes som `state.db.efter-opdatering`.
+- **Tidspunkt** (`schedule.go`): ejeren vælger dag (`daily` eller en ugedag), «HH:MM» og en IANA-tidszone
+  (standard `Europe/Copenhagen`; `updateTZs` er valgene i dropdown'en med danske navne og nuværende UTC-forskel,
+  «Andet …» giver et felt til enhver anden zone (`tzFromForm`), `Local` afvises), gemt i `Settings`. Det regnes i den
+  tidszone (tidszonerne er indlejret med `time/tzdata`), ikke serverens ur. `tick` kører hvert minut;
+  er tidspunktet nået (og højst to timer siden, `updateWindow`), og er der ikke prøvet siden (`LastAutoTry`), gemmes
+  forsøget, og opdateringen bedes om. Siden viser næste mulige tidspunkt (`schedule.next`).
+- **Under genstarten:** app-containerne kører videre, `Reconcile` overtager dem, og Caddy holder forespørgsler i op til
+  15 sekunder (`lb_try_duration`) i stedet for at svare 502.
+
 ## Tests
 
 ```sh
@@ -236,4 +295,8 @@ go test ./...
 
 Testene (`*_test.go`) er enhedstests af de dele, der er nemmest at få forkert: PBKDF2, `slugify`, `checkPath`,
 `secretish`, adgangsreglerne, `stripCookie`, udpakning af uploads (inkl. ondsindede stier), `parseRepo`,
-`checkBranch`, og at alle sider kan tegnes. Selve bygge-pipelinen og Docker er ikke dækket af tests.
+`checkBranch`, og at alle sider kan tegnes. `zerodowntime_test.go` kører udrulning, genstart, rollback og en fejlet
+version med demo-runtime'n, mens en klient sender forespørgsler hele tiden, og kræver, at ingen af dem fejler.
+`update_test.go` dækker versioner, signatur (forkert nøgle, ændret manifest), SHA-256, `vibedeploy update` (ok, intet
+nyt, forkert binær, tilbagerulning med og uden backup af data), anmodning og automatik på det valgte tidspunkt (i valgt tidszone og ved sommertid), skemavagten,
+`Reconcile`, der overtager kørende apps, `/healthz` og opdateringsenhederne. Docker-delen er ikke dækket af tests.

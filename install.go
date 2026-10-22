@@ -24,11 +24,18 @@ var serviceTemplate string
 //go:embed deploy/Caddyfile
 var caddyTemplate string
 
+//go:embed deploy/vibedeploy-update.service
+var updateServiceTemplate string
+
+//go:embed deploy/vibedeploy-update.path
+var updatePathTemplate string
+
 const (
 	etcDir       = "/etc/vibedeploy"
 	keyFilePath  = etcDir + "/secret.key"
 	envFilePath  = etcDir + "/env"
 	servicePath  = "/etc/systemd/system/vibedeploy.service"
+	unitDir      = "/etc/systemd/system/"
 	caddyPath    = "/etc/caddy/Caddyfile"
 	binaryPath   = "/usr/local/bin/vibedeploy"
 	placeholder  = "example.com"
@@ -78,6 +85,7 @@ func runInstall(args []string) {
 		{"Opsætningskode (" + envFilePath + ")", func() error { return writeEnvFile(cfg.SetupCode) }},
 		{"Tjeneste (" + servicePath + ")", func() error { return os.WriteFile(servicePath, []byte(renderService(cfg)), 0o644) }},
 		{"Caddy (" + caddyPath + ")", func() error { return os.WriteFile(caddyPath, []byte(renderCaddyfile(cfg)), 0o644) }},
+		{"Opdatering (" + unitDir + updatePathUnit + ")", writeUpdateUnits},
 		{"Start", startServices},
 	}
 	for _, s := range steps {
@@ -177,6 +185,14 @@ func dropHowTo(s string) string {
 	return strings.Join(out, "\n")
 }
 
+// writeUpdateUnits skriver de to systemd-enheder, der installerer nye versioner (se update.go).
+func writeUpdateUnits() error {
+	if err := os.WriteFile(unitDir+updateServiceUnit, []byte(dropHowTo(updateServiceTemplate)), 0o644); err != nil {
+		return err
+	}
+	return os.WriteFile(unitDir+updatePathUnit, []byte(dropHowTo(updatePathTemplate)), 0o644)
+}
+
 // ensureUser opretter systembrugeren vibedeploy, hvis den ikke findes.
 func ensureUser() error {
 	if exec.Command("id", "vibedeploy").Run() == nil {
@@ -203,6 +219,7 @@ func startServices() error {
 	for _, c := range [][]string{
 		{"systemctl", "daemon-reload"},
 		{"systemctl", "enable", "vibedeploy"},
+		{"systemctl", "enable", "--now", updatePathUnit},
 		{"systemctl", "restart", "vibedeploy"},
 	} {
 		if err := run(c[0], c[1:]...); err != nil {

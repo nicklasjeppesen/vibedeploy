@@ -21,14 +21,18 @@ import (
 
 // Runtime er det, der bygger og kører apps. Docker er til rigtig brug,
 // demo-runtime'n lader dig afprøve hele flowet uden Docker.
+//
+// Start, Stop og Logs arbejder på én container (inst), ikke på en hel app: en app har to pladser,
+// vd-<slug> og vd-<slug>_b (se instName), så en ny version kan starte ved siden af den gamle
+// og overtage trafikken uden nedetid. Start må aldrig røre den anden plads.
 type Runtime interface {
 	Name() string
 	Build(ctx context.Context, slug string, n int, dir string, logf func(string, ...any)) (image string, err error)
 	Pull(ctx context.Context, slug string, n int, ref ImageRef, user, token string, logf func(string, ...any)) (image string, err error)
-	Start(slug, image string, containerPort, hostPort int, env map[string]string, dir, volume string, logf func(string, ...any)) error
+	Start(inst, image string, containerPort, hostPort int, env map[string]string, dir, volume string, logf func(string, ...any)) error
 	RemoveImage(image string)
-	Stop(slug string) error
-	Logs(slug string, lines int) string
+	Stop(inst string) error
+	Logs(inst string, lines int) string
 }
 
 // ---------- Docker ----------
@@ -112,14 +116,15 @@ func (d *dockerRT) Pull(ctx context.Context, slug string, n int, ref ImageRef, u
 // RemoveImage sletter et gammelt image (fejl ignoreres).
 func (d *dockerRT) RemoveImage(image string) { _ = exec.Command("docker", "rmi", image).Run() }
 
-// Start erstatter appens container med en ny fra image. Containeren får højst 512 MB og 1 CPU,
-// appens datamappe monteres på /data, og porten publiceres kun på 127.0.0.1.
-func (d *dockerRT) Start(slug, image string, cport, hport int, env map[string]string, dir, volume string, logf func(string, ...any)) error {
-	name := "vd-" + slug
+// Start starter containeren inst fra image. En gammel container med samme navn (en tidligere
+// version på den ledige plads) fjernes først; den anden plads røres ikke. Containeren får højst
+// 512 MB og 1 CPU, appens datamappe monteres på /data, og porten publiceres kun på 127.0.0.1.
+func (d *dockerRT) Start(inst, image string, cport, hport int, env map[string]string, dir, volume string, logf func(string, ...any)) error {
+	name := inst
 	_ = exec.Command("docker", "rm", "-f", name).Run()
 
 	// Miljøvariabler går via en midlertidig fil, så de ikke står i procesoversigten.
-	envFile := filepath.Join(d.dataDir, "run", slug+".env")
+	envFile := filepath.Join(d.dataDir, "run", inst+".env")
 	if err := os.MkdirAll(filepath.Dir(envFile), 0o700); err != nil {
 		return err
 	}
@@ -148,14 +153,16 @@ func (d *dockerRT) Start(slug, image string, cport, hport int, env map[string]st
 	return nil
 }
 
-// Stop fjerner appens container.
-func (d *dockerRT) Stop(slug string) error {
-	return exec.Command("docker", "rm", "-f", "vd-"+slug).Run()
+// Stop lukker containeren pænt (SIGTERM, højst 10 sekunder til at gøre igangværende arbejde
+// færdigt) og fjerner den. Findes den ikke, sker der intet.
+func (d *dockerRT) Stop(inst string) error {
+	_ = exec.Command("docker", "stop", "-t", "10", inst).Run()
+	return exec.Command("docker", "rm", "-f", inst).Run()
 }
 
 // Logs henter de seneste linjer fra containerens stdout/stderr.
-func (d *dockerRT) Logs(slug string, lines int) string {
-	out, _ := exec.Command("docker", "logs", "--tail", fmt.Sprint(lines), "vd-"+slug).CombinedOutput()
+func (d *dockerRT) Logs(inst string, lines int) string {
+	out, _ := exec.Command("docker", "logs", "--tail", fmt.Sprint(lines), inst).CombinedOutput()
 	return string(out)
 }
 
@@ -197,9 +204,10 @@ func (d *demoRT) Pull(ctx context.Context, slug string, n int, ref ImageRef, use
 func (d *demoRT) RemoveImage(image string) {}
 
 // Start serverer appens mappe (eller en standardside, hvis der ikke er en index.html)
-// på 127.0.0.1:hport og logger hver forespørgsel.
-func (d *demoRT) Start(slug, image string, cport, hport int, env map[string]string, dir, volume string, logf func(string, ...any)) error {
-	_ = d.Stop(slug)
+// på 127.0.0.1:hport og logger hver forespørgsel. Kun en tidligere server med samme navn lukkes.
+func (d *demoRT) Start(inst, image string, cport, hport int, env map[string]string, dir, volume string, logf func(string, ...any)) error {
+	_ = d.Stop(inst)
+	slug := appOf(inst)
 	mux := http.NewServeMux()
 	index := filepath.Join(dir, "index.html")
 	_, statErr := os.Stat(index)
@@ -223,18 +231,18 @@ func (d *demoRT) Start(slug, image string, cport, hport int, env map[string]stri
 	}
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	d.mu.Lock()
-	d.servers[slug] = srv
+	d.servers[inst] = srv
 	d.mu.Unlock()
 	go srv.Serve(ln)
 	logf("[demo] App lytter på 127.0.0.1:%d", hport)
 	return nil
 }
 
-// Stop lukker appens demo-server, hvis den kører.
-func (d *demoRT) Stop(slug string) error {
+// Stop lukker demo-serveren inst, hvis den kører.
+func (d *demoRT) Stop(inst string) error {
 	d.mu.Lock()
-	srv := d.servers[slug]
-	delete(d.servers, slug)
+	srv := d.servers[inst]
+	delete(d.servers, inst)
 	d.mu.Unlock()
 	if srv != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -255,11 +263,12 @@ func (d *demoRT) addLog(slug, line string) {
 	d.logs[slug] = l
 }
 
-// Logs returnerer de seneste linjer fra demo-loggen.
-func (d *demoRT) Logs(slug string, lines int) string {
+// Logs returnerer de seneste linjer fra demo-loggen. Loggen er fælles for appens to pladser,
+// så historikken fortsætter på tværs af versioner.
+func (d *demoRT) Logs(inst string, lines int) string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	l := d.logs[slug]
+	l := d.logs[appOf(inst)]
 	if len(l) > lines {
 		l = l[len(l)-lines:]
 	}
@@ -304,6 +313,31 @@ func sortedKeys(m map[string]string) []string {
 	}
 	sort.Strings(k)
 	return k
+}
+
+// instName er navnet på appens container på en plads: "" giver vd-<slug> (samme navn som før
+// udrulning uden nedetid, så eksisterende containere passer), "b" giver vd-<slug>_b.
+// Slugs må ikke indeholde «_», så navnene kan ikke forveksles.
+func instName(slug, slot string) string {
+	if slot == "" {
+		return "vd-" + slug
+	}
+	return "vd-" + slug + "_" + slot
+}
+
+// otherSlot er den plads, der ikke er aktiv: den næste version startes dér.
+func otherSlot(slot string) string {
+	if slot == "" {
+		return "b"
+	}
+	return ""
+}
+
+// appOf finder appens slug ud fra et containernavn (vd-blog og vd-blog_b giver blog).
+func appOf(inst string) string {
+	s := strings.TrimPrefix(inst, "vd-")
+	s, _, _ = strings.Cut(s, "_")
+	return s
 }
 
 // freePort beder styresystemet om en ledig port på 127.0.0.1 til en ny app.

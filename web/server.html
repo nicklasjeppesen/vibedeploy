@@ -53,4 +53,47 @@
   {{end}}
   </ul>
 </section>
+
+{{with .Data.Self}}
+<section class="card" id="vibedeploy">
+  <div class="row"><h2>Vibe Deploy {{.Version}}</h2>
+    {{if .Pending}}<span class="status warn"><i></i>Opdaterer …</span>
+    {{else if .Latest}}<span class="status warn"><i></i>Ny version</span>
+    {{else if .Checked}}<span class="status ok"><i></i>Nyeste version</span>{{end}}</div>
+  {{if not .Release}}
+    <p class="muted">Dette er en udviklingsudgave, der ikke opdaterer sig selv. Byg en ny, og start den igen.</p>
+  {{else}}
+    {{if .Latest}}
+      <p><b>{{.Latest}}</b> er klar{{if .Notes}} (<a href="{{.Notes}}" target="_blank" rel="noopener">se ændringerne</a>){{end}}.
+        Vibe Deploy genstarter et øjeblik; dine apps kører videre imens. Svarer den nye version ikke, lægges den gamle tilbage.</p>
+      {{if .Pending}}<p class="muted">Opdateringen er gået i gang. Siden opdaterer sig selv.</p>
+      {{else if .CanUpdate}}<form method="post" action="/server/update"><input type="hidden" name="action" value="now"><button class="btn">Opdater nu</button></form>{{end}}
+    {{else if .Checked}}
+      <p class="muted">Du har den nyeste version. Tjekket {{.Checked}}.</p>
+    {{end}}
+    {{if .CheckErr}}<div class="note warn">Kunne ikke tjekke for en ny version: {{.CheckErr}}</div>{{end}}
+    {{if not .Installed}}<p class="muted small">Opdatering herfra kræver en installation med install.sh (systemd). Ellers: hent den nye binær, og start den igen.</p>
+    {{else if not .HasKey}}<p class="muted small">Denne version har ingen nøgle til at tjekke releases med, så den opdaterer sig ikke selv.</p>{{end}}
+    {{with .Status}}
+      <p class="small"><span class="status {{if eq .State "ok" "none"}}ok{{else if eq .State "running"}}warn{{else}}bad{{end}}"><i></i>Seneste opdatering</span>
+        {{.Message}} <span class="muted">({{$.Data.Self.StatusAgo}})</span></p>
+    {{end}}
+    <form method="post" action="/server/update" class="stack">
+      <input type="hidden" name="action" value="auto">
+      <label class="opt"><input type="checkbox" name="auto" {{if .Auto}}checked{{end}}> Installér nye versioner automatisk</label>
+      <div class="kv schedule">
+        <label>Hvornår<select name="day">{{range .Days}}<option value="{{.Key}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+        <label>Klokken<input type="time" name="at" value="{{.At}}" step="300" required></label>
+        <label>Tidszone<select name="tz" data-other="tz-other">{{range .TZs}}<option value="{{.Zone}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}
+          <option value="other" {{if .TZOther}}selected{{end}}>Andet …</option></select></label>
+      </div>
+      <label id="tz-other" class="tzother">Anden tidszone (IANA-navn, fx America/Toronto)<input name="tz_other" value="{{if .TZOther}}{{.TZ}}{{end}}" autocomplete="off" spellcheck="false" placeholder="Område/By"></label>
+      <p class="muted small">{{if .Auto}}Automatisk {{.Schedule}}, {{.TZLabel}}.{{if .Next}} Næste mulige tidspunkt: {{.Next}}.{{end}}{{else}}Slået fra: du opdaterer selv med knappen.{{end}}
+        Der opdateres kun, når der er en ny version. Opdateringen går i gang inden for to timer efter det valgte tidspunkt.</p>
+      <div class="actions left"><button class="btn ghost">Gem</button></div>
+    </form>
+    <form method="post" action="/server/update"><input type="hidden" name="action" value="check"><button class="linkbtn">Tjek for en ny version nu</button></form>
+  {{end}}
+</section>
+{{end}}
 {{end}}

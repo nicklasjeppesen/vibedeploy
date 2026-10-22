@@ -1,0 +1,11 @@
+# Gem som /etc/systemd/system/vibedeploy-update.path, og kør: systemctl enable --now vibedeploy-update.path
+# Holder øje med filen, Vibe Deploy lægger, når en opdatering skal installeres.
+[Unit]
+Description=Vibe Deploy: hold øje med anmodninger om opdatering
+
+[Path]
+PathExists=/var/lib/vibedeploy/update-request
+Unit=vibedeploy-update.service
+
+[Install]
+WantedBy=multi-user.target

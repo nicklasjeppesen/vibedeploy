@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -31,6 +32,7 @@ type Server struct {
 	st        *Store
 	mgr       *Manager
 	mon       *Monitor
+	upd       *Updater
 	rt        Runtime
 	pages     map[string]*template.Template
 	domain    string
@@ -44,9 +46,24 @@ type Server struct {
 // main læser flag, åbner tilstanden, vælger runtime (docker eller demo), genstarter apps,
 // der kørte sidst, og starter HTTP-serveren. Ctrl+C lukker pænt ned.
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "install" {
-		runInstall(os.Args[2:])
-		return
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "install":
+			runInstall(os.Args[2:])
+			return
+		case "update":
+			runUpdate(os.Args[2:])
+			return
+		case "version", "-version", "--version":
+			fmt.Println(version)
+			return
+		case "keygen":
+			runKeygen(os.Args[2:])
+			return
+		case "sign":
+			runSign(os.Args[2:])
+			return
+		}
 	}
 	addr := flag.String("addr", "127.0.0.1:8080", "adresse serveren lytter på")
 	domain := flag.String("domain", "localhost", "hoveddomæne; apps får <navn>.<domæne>")
@@ -93,6 +110,7 @@ func main() {
 	s := &Server{st: st, rt: rt, domain: *domain, addr: *addr, publicURL: strings.TrimRight(*public, "/")}
 	s.mgr = NewManager(st, rt, abs)
 	s.mon = NewMonitor(abs, rt)
+	s.upd = NewUpdater(abs, st)
 	s.pages = loadPages()
 	if len(st.Snapshot().Users) == 0 {
 		if code := strings.TrimSpace(os.Getenv("VIBEDEPLOY_SETUP_CODE")); code != "" {
@@ -106,19 +124,22 @@ func main() {
 	s.mgr.Reconcile()
 	go s.mgr.DailyBackups()
 	go s.mon.Run()
+	go s.upd.Run()
 
 	srv := &http.Server{Addr: *addr, Handler: s.handler(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
+		// Ctrl+C lokalt, SIGTERM fra systemd (fx under en opdatering): færdiggør igangværende forespørgsler.
+		// Appenes containere kører videre; næste start overtager dem (Reconcile).
 		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt)
+		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 		<-c
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		srv.Shutdown(ctx)
 	}()
 
-	fmt.Printf("\nVibe Deploy kører (%s)\n  Dashboard:   http://%s\n  MCP-adresse: http://%s/mcp\n  Apps:        http://<navn>.%s%s\n\n",
-		rt.Name(), displayHost(*addr, *domain), displayHost(*addr, *domain), *domain, portSuffix(*addr, *domain))
+	fmt.Printf("\nVibe Deploy %s kører (%s)\n  Dashboard:   http://%s\n  MCP-adresse: http://%s/mcp\n  Apps:        http://<navn>.%s%s\n\n",
+		version, rt.Name(), displayHost(*addr, *domain), displayHost(*addr, *domain), *domain, portSuffix(*addr, *domain))
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatal(err)
 	}

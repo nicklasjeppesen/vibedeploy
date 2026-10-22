@@ -109,7 +109,7 @@ func TestDeployImageFlow(t *testing.T) {
 	if a = waitStatus(t, m, "min-app", StatusLive); a.Current != 2 {
 		t.Fatalf("version 2 burde køre, fik %d", a.Current)
 	}
-	_ = m.rt.Stop("min-app")
+	m.stopAll("min-app")
 
 	// Godkendt app, hvor login mangler: intet hentes, før ejeren har udfyldt det.
 	if _, err := m.DeployImage("Anden", "nginx", 0, false, "", "u1"); err != nil {
@@ -117,7 +117,7 @@ func TestDeployImageFlow(t *testing.T) {
 	}
 	_ = m.Approve("anden")
 	waitStatus(t, m, "anden", StatusLive)
-	_ = m.rt.Stop("anden")
+	m.stopAll("anden")
 	_, err = m.DeployImage("Anden", "firma/hemmelig", 0, true, "", "u1")
 	var nl *ErrNeedLogin
 	if !errors.As(err, &nl) {

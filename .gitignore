@@ -9,3 +9,7 @@
 secret.key
 state.json*
 .DS_Store
+
+# Hemmelig nøgle til at signere releases (go run . keygen). Må aldrig i git.
+release-signing.key
+*.key

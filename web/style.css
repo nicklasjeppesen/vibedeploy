@@ -41,10 +41,13 @@ h1 .status{font-size:15px;vertical-align:middle;margin-left:8px}
 .stack{display:flex;flex-direction:column;gap:16px}
 label{display:flex;flex-direction:column;gap:6px;font-weight:700;font-size:14px}
 .hint{font-weight:400;color:var(--muted)}
-input{min-height:48px;padding:0 14px;border-radius:12px;border:1px solid #AEB9C2;background:#fff;color:var(--ink);font-family:inherit;font-size:16px;width:100%}
+input,select{min-height:48px;padding:0 14px;border-radius:12px;border:1px solid #AEB9C2;background:#fff;color:var(--ink);font-family:inherit;font-size:16px;width:100%}
 .inline{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.inline input{flex:1;min-width:200px;width:auto}
 .kv{display:grid;grid-template-columns:minmax(120px,220px) 1fr;gap:12px;align-items:center}
 .kv.secret{grid-template-columns:minmax(120px,220px) auto 1fr auto;margin-bottom:12px}
+.kv.schedule{grid-template-columns:minmax(140px,200px) minmax(120px,160px) minmax(220px,340px);justify-content:start}
+.tzother{max-width:420px}
+[hidden]{display:none!important}
 .kv input{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px}
 code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px}
 .urlbox{display:flex;align-items:center;gap:12px;background:#14212B;color:#E8EEF2;border-radius:14px;padding:12px 14px 12px 18px;margin:14px 0}
@@ -98,5 +101,5 @@ h2.gap{margin-top:24px}
 .usage thead th{color:var(--muted);font-size:13px;font-weight:700;border-top:0}
 .usage .num{text-align:right;font-variant-numeric:tabular-nums}
 .rowline b{font-variant-numeric:tabular-nums;white-space:nowrap}
-@media (max-width:700px){.two,.kv,.kv.secret,.facts{grid-template-columns:1fr}.head{flex-direction:column;align-items:flex-start}main{padding:24px 16px}.top{height:auto;min-height:56px;flex-wrap:wrap;gap:4px 16px;padding:8px 16px}.top nav{flex-wrap:wrap;gap:4px 14px}}
+@media (max-width:700px){.two,.kv,.kv.secret,.kv.schedule,.facts{grid-template-columns:1fr}.head{flex-direction:column;align-items:flex-start}main{padding:24px 16px}.top{height:auto;min-height:56px;flex-wrap:wrap;gap:4px 16px;padding:8px 16px}.top nav{flex-wrap:wrap;gap:4px 14px}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

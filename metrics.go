@@ -247,6 +247,7 @@ func (d *dockerRT) SystemDF() []DockerDF {
 }
 
 // parseDockerStats læser linjer som «vd-blog\t0.15%\t12.5MiB / 512MiB». Andre containere springes over.
+// Appens to pladser (vd-blog og vd-blog_b) tælles som én app.
 func parseDockerStats(out string) map[string]AppUsage {
 	res := map[string]AppUsage{}
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
@@ -254,14 +255,19 @@ func parseDockerStats(out string) map[string]AppUsage {
 		if len(f) != 3 {
 			continue
 		}
-		slug, ok := strings.CutPrefix(strings.TrimSpace(f[0]), "vd-")
-		if !ok {
+		name := strings.TrimSpace(f[0])
+		if !strings.HasPrefix(name, "vd-") {
 			continue
 		}
+		slug := appOf(name) // vd-blog og vd-blog_b er samme app
 		u := AppUsage{Running: true}
 		u.CPU, _ = strconv.ParseFloat(strings.TrimSuffix(strings.TrimSpace(f[1]), "%"), 64)
 		if used, limit, ok := strings.Cut(f[2], "/"); ok {
 			u.MemUsed, u.MemLimit = parseSize(used), parseSize(limit)
+		}
+		if prev, ok := res[slug]; ok { // kort overlap under en udrulning: læg de to containere sammen
+			u.CPU += prev.CPU
+			u.MemUsed += prev.MemUsed
 		}
 		res[slug] = u
 	}

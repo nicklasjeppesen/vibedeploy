@@ -148,7 +148,37 @@ func (s *Server) serverPage(w http.ResponseWriter, r *http.Request, u *User) {
 		"Parts":       parts,
 		"Docker":      s.rt.Name() == "docker",
 		"RefreshSecs": 30,
+		"Self":        s.upd.View(),
 	})
+}
+
+// serverUpdate er knapperne under «Vibe Deploy» på siden Server: opdater nu, tjek nu, automatisk til/fra.
+func (s *Server) serverUpdate(w http.ResponseWriter, r *http.Request, u *User) {
+	_ = r.ParseForm()
+	msg := ""
+	switch r.PostForm.Get("action") {
+	case "now":
+		if err := s.upd.Request("startet af " + u.Name); err != nil {
+			s.page(w, r, "message.html", "Opdatering", map[string]any{"Text": err.Error(), "Back": "/server"})
+			return
+		}
+		msg = "updating"
+	case "check":
+		s.upd.Check()
+		msg = "checked"
+	case "auto":
+		on := r.PostForm.Get("auto") == "on"
+		tz, err := tzFromForm(r.PostForm.Get("tz"), r.PostForm.Get("tz_other"))
+		if err == nil {
+			err = s.upd.SetSchedule(on, r.PostForm.Get("day"), r.PostForm.Get("at"), tz)
+		}
+		if err != nil {
+			s.page(w, r, "message.html", "Opdatering", map[string]any{"Text": err.Error(), "Back": "/server"})
+			return
+		}
+		msg = map[bool]string{true: "autoon", false: "autooff"}[on]
+	}
+	http.Redirect(w, r, "/server?m="+msg+"#vibedeploy", http.StatusSeeOther)
 }
 
 // chart er en graf med sin titel.

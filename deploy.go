@@ -98,7 +98,8 @@ func (m *Manager) Logs(slug string, lines int) string {
 		l = l[len(l)-lines:]
 	}
 	out := strings.Join(l, "\n")
-	if rl := strings.TrimSpace(m.rt.Logs(slug, lines)); rl != "" {
+	a, _ := m.get(slug)
+	if rl := strings.TrimSpace(m.rt.Logs(instName(slug, a.Slot), lines)); rl != "" {
 		out += "\n\n--- appens egen log ---\n" + rl
 	}
 	return strings.TrimSpace(out)
@@ -383,14 +384,20 @@ func (m *Manager) pipeline(slug string, n int) {
 	m.pruneVersions(slug)
 }
 
-// failed markerer version n som fejlet. Kørte der en tidligere version (prev), startes den igen,
-// så appen bliver ved med at være online; ellers står appen som fejlet med en forklaring.
+// failed markerer version n som fejlet. Den nye version blev startet ved siden af den gamle,
+// så kører den forrige version (prev) stadig, er der intet at gøre: appen var online hele tiden.
+// Kører den ikke (fx fordi appen var sat på pause), startes den igen; ellers står appen som fejlet.
 func (m *Manager) failed(slug string, n, prev int) {
 	logf := m.logger(slug)
 	text := explain(m.Logs(slug, 60))
 	m.update(slug, func(a *App) { a.Versions[n-1].Failed = true })
 	if prev > 0 {
 		a, _ := m.get(slug)
+		if a.HostPort > 0 && waitHealthy(a.HostPort, 2*time.Second) {
+			logf("Version %d fejlede; version %d kørte videre uden afbrydelse", n, prev)
+			m.setStatus(slug, StatusLive, fmt.Sprintf("Version %d fejlede, så version %d kører stadig. %s", n, prev, text))
+			return
+		}
 		if img := a.Versions[prev-1].Image; img != "" {
 			if err := m.startVersion(slug, prev, img); err == nil {
 				logf("Version %d fejlede; version %d kører videre", n, prev)
@@ -402,8 +409,20 @@ func (m *Manager) failed(slug string, n, prev int) {
 	m.setStatus(slug, StatusFailed, text)
 }
 
-// startVersion starter et bygget image med appens variabler og /data-mappe
-// og venter op til 40 sekunder på, at appen svarer.
+// drainDelay er, hvor længe den gamle container får lov at køre efter skiftet, så forespørgsler,
+// der allerede var i gang, kan blive færdige. Derefter får den SIGTERM (se Runtime.Stop).
+var drainDelay = 10 * time.Second
+
+// startVersion udruller version n uden nedetid ("blue-green"):
+//
+//  1. Den nye container startes på appens ledige plads (otherSlot) og en ny port, ved siden af den gamle.
+//  2. Serveren venter op til 40 sekunder på, at den svarer på /health.
+//  3. Trafikken flyttes i ét skridt: proxyen læser HostPort ved hver forespørgsel.
+//  4. Den gamle container lukkes, når drainDelay er gået (retire).
+//
+// Svarer den nye version ikke, fjernes den igen, og den gamle kører uforstyrret videre.
+// Under overlappet deler de to containere appens /data-mappe.
+// Kaldes med appens lås (lockFor) holdt; tager selv pladslåsen (slotLock).
 func (m *Manager) startVersion(slug string, n int, image string) error {
 	a, ok := m.get(slug)
 	if !ok {
@@ -414,14 +433,53 @@ func (m *Manager) startVersion(slug string, n int, image string) error {
 	if err != nil {
 		return err
 	}
-	if err := m.rt.Start(slug, image, a.Port, a.HostPort, envFor(a), a.Versions[n-1].Dir, vol, logf); err != nil {
+	// Pladslåsen dækker start → skift, så retire aldrig lukker en container, der er ved at blive startet.
+	// (Appens lås kan ikke bruges til det: den holdes under hele den næste bygning.)
+	sl := m.slotLock(slug)
+	sl.Lock()
+	defer sl.Unlock()
+	slot := otherSlot(a.Slot)
+	inst := instName(slug, slot)
+	port, err := freePort()
+	if err != nil {
 		return err
 	}
-	if !waitHealthy(a.HostPort, 40*time.Second) {
-		_ = m.rt.Stop(slug)
+	if err := m.rt.Start(inst, image, a.Port, port, envFor(a), a.Versions[n-1].Dir, vol, logf); err != nil {
+		_ = m.rt.Stop(inst)
+		return err
+	}
+	if !waitHealthy(port, 40*time.Second) {
+		_ = m.rt.Stop(inst)
 		return fmt.Errorf("appen svarer ikke på port %d inden for 40 sekunder – lytter den på den port, du har angivet?", a.Port)
 	}
+	old, delay := a.Slot, drainDelay
+	m.update(slug, func(a *App) { a.HostPort, a.Slot = port, slot })
+	logf("Trafikken går nu til version %d (%s); den forrige container lukkes om %s", n, inst, delay)
+	go m.retire(slug, old, delay)
 	return nil
+}
+
+// retire lukker containeren på pladsen slot, når delay er gået. Under pladslåsen tjekkes,
+// at pladsen stadig ikke er den aktive: en ny udrulning kan i mellemtiden have skiftet til den.
+func (m *Manager) retire(slug, slot string, delay time.Duration) {
+	time.Sleep(delay)
+	sl := m.slotLock(slug)
+	sl.Lock()
+	defer sl.Unlock()
+	if a, ok := m.get(slug); ok && a.Slot == slot {
+		return
+	}
+	_ = m.rt.Stop(instName(slug, slot))
+}
+
+// slotLock er appens lås for start og lukning af containere på dens to pladser.
+// Nøglen kan ikke forveksles med en app, da slugs ikke må indeholde «#».
+func (m *Manager) slotLock(slug string) *sync.Mutex { return m.lockFor(slug + "#slot") }
+
+// stopAll lukker begge appens pladser.
+func (m *Manager) stopAll(slug string) {
+	_ = m.rt.Stop(instName(slug, ""))
+	_ = m.rt.Stop(instName(slug, "b"))
 }
 
 // envFor samler miljøvariablerne til containeren: PORT og DATA_DIR, appens variabler og de
@@ -515,7 +573,7 @@ func (m *Manager) Stop(slug string) error {
 	if _, ok := m.get(slug); !ok {
 		return errors.New("appen findes ikke")
 	}
-	_ = m.rt.Stop(slug)
+	m.stopAll(slug)
 	m.setStatus(slug, StatusStopped, "Appen er sat på pause")
 	m.logger(slug)("Appen blev stoppet")
 	return nil
@@ -523,7 +581,7 @@ func (m *Manager) Stop(slug string) error {
 
 // Delete fjerner appen helt: container, versioner, data, backups, log og deploy key.
 func (m *Manager) Delete(slug string) error {
-	_ = m.rt.Stop(slug)
+	m.stopAll(slug)
 	_ = os.RemoveAll(filepath.Join(m.dataDir, "apps", slug))
 	_ = os.RemoveAll(m.volumeDir(slug))
 	_ = os.RemoveAll(m.backupDir(slug))
@@ -641,16 +699,48 @@ func (m *Manager) RequestSecrets(slug string, keys []string) error {
 	})
 }
 
-// Reconcile genstarter apps, der var live, da serveren sidst lukkede.
+// Reconcile bringer apps i orden, når Vibe Deploy starter. Kører en apps container stadig (Docker holder
+// den i gang, fx mens Vibe Deploy opdateres eller genstartes), overtages den, som den er, uden genstart;
+// kun den ubrugte plads ryddes op. Ellers startes appens nuværende version igen. Hver app tjekkes for sig,
+// så en app, der ikke svarer, ikke forsinker de andre.
 func (m *Manager) Reconcile() {
 	db := m.st.Snapshot()
+	var wg sync.WaitGroup
 	for slug, a := range db.Apps {
 		switch {
 		case a.Current > 0 && (a.Status == StatusLive || a.Status == StatusStarting || a.Status == StatusBuilding):
-			m.setStatus(slug, StatusStarting, "Starter din app …")
-			go m.switchTo(slug, a.Current)
+			wg.Add(1)
+			go func(slug string, a App) {
+				defer wg.Done()
+				m.reconcileApp(slug, a)
+			}(slug, *a)
 		case a.Status == StatusBuilding || a.Status == StatusStarting:
 			m.setStatus(slug, StatusFailed, "Serveren blev lukket, mens appen blev bygget. Bed Claude udgive den igen.")
 		}
 	}
+	wg.Wait()
+}
+
+// reconcileApp overtager appens kørende container eller starter den igen.
+func (m *Manager) reconcileApp(slug string, a App) {
+	logf := m.logger(slug)
+	if a.HostPort > 0 && waitHealthy(a.HostPort, 2*time.Second) {
+		text := ""
+		if a.Status != StatusLive {
+			text = fmt.Sprintf("Serveren blev genstartet, mens en ny version blev bygget; version %d kører stadig. Bed Claude udgive igen.", a.Current)
+		}
+		m.setStatus(slug, StatusLive, text)
+		logf("Vibe Deploy startede; version %d kørte allerede og fortsætter uden genstart", a.Current)
+		go func() { // en container fra en afbrudt udrulning på den anden plads
+			sl := m.slotLock(slug)
+			sl.Lock()
+			defer sl.Unlock()
+			if cur, ok := m.get(slug); ok && cur.Slot == a.Slot {
+				_ = m.rt.Stop(instName(slug, otherSlot(a.Slot)))
+			}
+		}()
+		return
+	}
+	m.setStatus(slug, StatusStarting, "Starter din app …")
+	_ = m.switchTo(slug, a.Current)
 }

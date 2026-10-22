@@ -18,7 +18,7 @@ Følg disse regler, så virker udgivelsen som regel første gang:
 
 1. Dockerfile i roden. Byg med flere trin (multi-stage), hvis der skal kompileres; det endelige image skal være lille.
 2. Lyt på 0.0.0.0 (ikke localhost/127.0.0.1) og på porten fra miljøvariablen PORT. Angiv samme port i udgivelseskaldet (standard 8080).
-3. Data, der skal overleve, gemmes i mappen fra DATA_DIR (/data). Alt andet i containeren forsvinder ved genstart og ny version. Brug SQLite i /data i stedet for en separat database.
+3. Data, der skal overleve, gemmes i mappen fra DATA_DIR (/data). Alt andet i containeren forsvinder ved genstart og ny version. Brug SQLite i /data i stedet for en separat database, med WAL slået til (PRAGMA journal_mode=WAL): ved en ny version kører den gamle og den nye container kortvarigt samtidig mod samme /data, så trafikken kan skifte uden nedetid.
 4. Lav en /health-side, der svarer 200 «ok» hurtigt og uden login, når appen er klar. Serveren venter på den ved opstart (højst 40 sekunder).
 5. Ingen hemmeligheder i filerne. Læs dem fra miljøvariabler, og opret pladsen med request_secret; ejeren indsætter værdien i dashboardet. Almindelige indstillinger sættes med set_env.
 6. Én container og én port pr. app. Ingen docker-compose og ingen ekstra tjenester.

@@ -80,7 +80,7 @@ func (s *Server) mcp(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, rpcOK(req.ID, map[string]any{
 			"protocolVersion": pv,
 			"capabilities":    map[string]any{"tools": map[string]any{}},
-			"serverInfo":      map[string]string{"name": "vibe-deploy", "version": "0.1.0"},
+			"serverInfo":      map[string]string{"name": "vibe-deploy", "version": version},
 			"instructions":    "Udgiv apps som containere på ejerens egen server. Kald get_build_guide (med stack, fx node, python, go eller static), før du skriver eller udgiver en ny app: den har reglerne og en Dockerfile-skabelon. Kort: Dockerfile i roden, lyt på 0.0.0.0 og porten fra PORT, gem data i DATA_DIR (/data), lav en /health-side. Små apps: deploy_app med filerne som tekst. Større apps: prepare_upload, hvis du har en terminal, ellers deploy_from_git, hvor serveren selv henter koden fra et git-repo. Færdige images fra Docker Hub eller et andet registry: deploy_image. Hemmeligheder må aldrig sendes i chatten: brug request_secret.",
 		}))
 	case "ping":

@@ -25,8 +25,49 @@ opsætningskode, du selv vælger. Den kører samme kommando med svarene som milj
 
 **Releases:** Scriptet henter fra GitHub Releases i `nicklasjeppesen/vibedeploy`. En ny release laves ved at pushe
 et tag (`git tag v0.2.0 && git push --tags`). Workflowet i `.github/workflows/release.yml`
-bygger `vibedeploy-linux-amd64`, `vibedeploy-linux-arm64` og lægger `install.sh` ved. Uden GitHub: sæt
-`VIBEDEPLOY_URL` til et andet link (ARCH erstattes med amd64/arm64).
+bygger `vibedeploy-linux-amd64`, `vibedeploy-linux-arm64` med versionsnummeret indbygget, signerer dem og lægger
+`install.sh`, `release.json` og `release.json.sig` ved. Uden GitHub: sæt `VIBEDEPLOY_URL` til et andet link
+(ARCH erstattes med amd64/arm64).
+
+**Signering (én gang, før den første release):** Serverne installerer kun releases, der er signeret med projektets
+nøgle. Kør på din Mac:
+
+```sh
+go run . keygen            # laver release-signing.key og viser den offentlige nøgle
+```
+
+1. Sæt den offentlige nøgle ind i `releasekey.go` (`var releasePublicKey = "…"`), og commit den.
+2. Læg indholdet af `release-signing.key` i en GitHub-secret med navnet `VIBEDEPLOY_SIGNING_KEY`
+   (repoets Settings → Secrets and variables → Actions). Gem en kopi et sikkert sted, fx i din password-manager.
+   `.gitignore` udelukker `*.key`, men tjek alligevel med `git status`, at filen ikke er med, før du committer.
+3. Push et tag som `v0.3.0` (formen `vX.Y.Z`; andre tags kan ikke sammenlignes og bliver ikke installeret).
+   Workflowet nægter at signere, hvis nøglen ikke passer med `releasekey.go`.
+4. **Den første version med nøglen skal installeres i hånden** på servere, der allerede kører: kør `install.sh` igen.
+   En version uden nøgle i `releasekey.go` kan ikke tjekke releases og opdaterer sig derfor aldrig selv.
+
+**To forskellige nøgler, som ikke må forveksles:**
+
+| Fil | Hvor | Hvad den gør | Mister du den |
+|---|---|---|---|
+| `release-signing.key` | Din Mac + GitHub-secret | Signerer releases, så serverne stoler på dem | Serverne kan ikke opdatere sig selv længere (se nedenfor) |
+| `secret.key` | Hver server (`/etc/vibedeploy/secret.key`) | Krypterer appenes hemmeligheder i `state.db` | Hemmelighederne på den server kan ikke læses igen |
+
+`release-signing.key` skal aldrig ligge på en server, og `secret.key` skal aldrig i GitHub.
+
+**Hvis `release-signing.key` bliver væk:** de installerede servere stoler kun på den gamle nøgle, så de kan ikke længere
+opdatere sig selv. Lav et nyt nøglepar med `go run . keygen`, sæt den nye offentlige nøgle i `releasekey.go`, erstat
+GitHub-secret'en, udgiv en ny version, og kør `install.sh` igen på hver server.
+
+**Hvis `release-signing.key` er lækket** (fx kommet i git eller set af andre): gør det samme som ovenfor, med det samme.
+Indtil hver server har fået den nye version via `install.sh`, så slå «Installér nye versioner automatisk» fra på siden
+Server, og tryk ikke «Opdater nu». Serverne henter kun fra dit eget repos releases, så den, der har nøglen, skal også
+kunne lægge filer i dine releases; men gå ud fra, at det kan ske. Er nøglen kommet i git, er den der stadig i
+historikken, selvom du sletter filen.
+
+**Stærkere værn:** den hemmelige nøgle ligger i GitHub, så signaturen beskytter mod ændrede filer i en release, men
+ikke mod nogen, der har overtaget selve GitHub-kontoen. Vil du have det stærkeste værn, så lad være med at oprette
+secret'en, og signér på din egen maskine: hent binærerne fra releasen til `dist/`, kør
+`go run . sign -key release-signing.key -version v0.3.0 dist/`, og upload `release.json` og `release.json.sig` til releasen.
 
 Resten af denne fil er den manuelle vej.
 
@@ -72,6 +113,10 @@ scp deploy/Caddyfile root@SERVER-IP:/etc/caddy/Caddyfile
 ```
 
 ## 5. Ret og start (på serveren)
+
+Vil du også have opdatering fra dashboardet: kopiér `deploy/vibedeploy-update.service` og `deploy/vibedeploy-update.path`
+til `/etc/systemd/system/`, og kør `systemctl enable --now vibedeploy-update.path`.
+
 1. Åbn `/etc/systemd/system/vibedeploy.service` og erstat `example.com` (to steder) med dit domæne.
 2. Åbn `/etc/caddy/Caddyfile` og erstat `example.com` (to steder) og e-mailadressen.
 3. Opret en bruger og start:
@@ -106,4 +151,19 @@ journalctl -u vibedeploy | grep Opsætningskode
 - **Certifikater:** Caddy henter ét certifikat pr. app, første gang adressen besøges. Let's Encrypt har grænser for, hvor mange der kan udstedes pr. tidsrum, så det er fint til få apps. Til mange apps: brug et wildcard-certifikat via Caddys DNS-udvidelse for din domæneudbyder.
 - **Fejl med certifikater:** `journalctl -u caddy -e`.
 - **Docker-gruppen er i praksis root.** Den, der kan få tjenesten til at starte containere, har stor magt på maskinen. Hold serveren opdateret (`apt install unattended-upgrades`), og brug en stærk adgangskode.
-- **Opdatering:** byg og upload en ny binær, derefter `systemctl restart vibedeploy`. Apps genstartes automatisk.
+- **Opdatering af Vibe Deploy:** under siden **Server** står, om der er en ny version. Tryk «Opdater nu», eller slå
+  automatisk opdatering til og vælg hvornår: hver dag eller en bestemt ugedag, et klokkeslæt og en tidszone
+  (en dropdown med 25 almindelige zoner på dansk, standard «Danmark (København)»; under «Andet …» kan enhver
+  IANA-tidszone skrives, fx America/Toronto). Tidspunktet følger den
+  valgte tidszone og dens sommertid, uanset serverens ur. Opdateringen går i gang inden for to timer efter tidspunktet, og
+  hvert tidspunkt prøves kun én gang. Standard er hver dag kl. 03:00. Serveren tager en backup af `state.db` og lægger
+  `update-request` i data-mappen; `vibedeploy-update.path` starter så `vibedeploy update` som root. Den henter den nyeste
+  release, tjekker signatur og SHA-256, gemmer den gamle binær som `vibedeploy.prev`, skifter og genstarter tjenesten.
+  Svarer den nye version ikke på `/healthz` inden for 60 sekunder, lægges den gamle tilbage (og kun hvis den ikke kan
+  starte på de nuværende data, også backuppen af `state.db`). Appenes containere kører videre imens, og Caddy lader
+  forespørgsler vente (`lb_try_duration`), mens tjenesten genstarter. Forløbet: `journalctl -u vibedeploy-update`.
+  Fra terminalen: `vibedeploy update -check` (se, om der er en ny) og `systemctl start vibedeploy-update` (opdatér nu).
+- **Opgradering af en server fra før selvopdatering:** kør `install.sh` (eller `vibedeploy install`) igen én gang.
+  Den henter den nye binær og opretter de to enheder til opdatering.
+- **Manuel opdatering:** byg og upload en ny binær, derefter `systemctl restart vibedeploy`. Kørende apps overtages
+  uden genstart.

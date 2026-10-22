@@ -1,5 +1,7 @@
 # Erstat example.com med dit domæne (to steder) og e-mailadressen.
 # Caddy henter og fornyer https-certifikater automatisk.
+# lb_try_duration: mens Vibe Deploy genstarter (fx under en opdatering), venter forespørgsler op til
+# 15 sekunder i stedet for at fejle.
 {
 	email din@email.dk
 	# Caddy spørger Vibe Deploy, om et navn hører til en rigtig app, før der udstedes certifikat.
@@ -10,7 +12,9 @@
 
 # Dashboardet og MCP-adressen
 example.com {
-	reverse_proxy 127.0.0.1:8080
+	reverse_proxy 127.0.0.1:8080 {
+		lb_try_duration 15s
+	}
 }
 
 # Dine apps (navn.example.com)
@@ -18,10 +22,14 @@ example.com {
 	tls {
 		on_demand
 	}
-	reverse_proxy 127.0.0.1:8080
+	reverse_proxy 127.0.0.1:8080 {
+		lb_try_duration 15s
+	}
 }
 
 # http://SERVERENS-IP: statussiden under installationen (domæner sendes stadig til https)
 :80 {
-	reverse_proxy 127.0.0.1:8080
+	reverse_proxy 127.0.0.1:8080 {
+		lb_try_duration 15s
+	}
 }

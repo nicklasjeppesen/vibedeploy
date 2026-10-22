@@ -99,7 +99,8 @@ type App struct {
 	Visibility   string   // private (standard), shared, members, public
 	Access       []string // bruger-id'er, når Visibility er shared
 	Port         int      // port appen lytter på inde i containeren
-	HostPort     int      // port på værten (kun 127.0.0.1)
+	HostPort     int      // port på værten (kun 127.0.0.1), som trafikken sendes til lige nu
+	Slot         string   // aktiv container-plads: "" (vd-<slug>) eller "b" (vd-<slug>_b); skifter ved hver udrulning
 	Status       string
 	StatusText   string
 	Approved     bool
@@ -136,6 +137,22 @@ type DB struct {
 	Tickets  map[string]*Ticket
 	Uploads  map[string]*Upload
 	GitKeys  map[string]*GitKey
+	Settings Settings
+}
+
+// schemaVersion er versionen af databasens indhold. Den hæves, når en ny version ændrer data på en måde,
+// som en ældre version ikke kan læse rigtigt. En ældre binær nægter at starte på nyere data, så en
+// opdatering, der rulles tilbage, også lægger den tilsvarende backup af state.db tilbage (se update.go).
+const schemaVersion = 1
+
+// Settings er serverens egne indstillinger (én række, «server», i tabellen settings).
+type Settings struct {
+	Schema      int       // skemaversion, data sidst blev skrevet med
+	AutoUpdate  bool      // installér nye versioner af Vibe Deploy automatisk på det valgte tidspunkt
+	UpdateDay   string    // «daily» eller en ugedag («sun» …); tom = hver dag (se schedule.go)
+	UpdateAt    string    // klokkeslæt i UpdateTZ, «HH:MM»; tom = 03:00
+	UpdateTZ    string    // IANA-tidszone, fx «Europe/Copenhagen»; tom = Europe/Copenhagen
+	LastAutoTry time.Time // seneste automatiske forsøg, så hvert tidspunkt kun prøves én gang
 }
 
 // Store holder hele tilstanden i hukommelsen og gemmer den i SQLite (state.db).
@@ -150,7 +167,7 @@ type Store struct {
 }
 
 // tables er tabellerne i state.db. Alle har samme form: id, pos (rækkefølge) og data (JSON).
-var tables = []string{"users", "sessions", "clients", "codes", "tokens", "apps", "invites", "tickets", "uploads", "gitkeys"}
+var tables = []string{"users", "sessions", "clients", "codes", "tokens", "apps", "invites", "tickets", "uploads", "gitkeys", "settings"}
 
 // OpenStore åbner (eller opretter) dir/state.db. Findes der en state.json fra en tidligere version,
 // og er databasen tom, flyttes dataene over, og filen omdøbes til state.json.importeret.
@@ -175,6 +192,10 @@ func OpenStore(dir string, box *secretBox) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if s.db.Settings.Schema > schemaVersion {
+		db.Close()
+		return nil, fmt.Errorf("state.db er skrevet af en nyere version af Vibe Deploy (skema %d; denne version kender skema %d). Brug den nyere version, eller læg backuppen fra før opdateringen tilbage", s.db.Settings.Schema, schemaVersion)
+	}
 	legacy := filepath.Join(dir, "state.json")
 	imported := false
 	if len(s.saved["users"]) == 0 && len(s.saved["apps"]) == 0 {
@@ -188,6 +209,7 @@ func OpenStore(dir string, box *secretBox) (*Store, error) {
 	}
 	s.db.init()
 	s.db.migrate()
+	s.db.Settings.Schema = schemaVersion
 	if err := s.save(); err != nil {
 		db.Close()
 		return nil, err
@@ -273,6 +295,8 @@ func (d *DB) rows() map[string]map[string]row {
 	rowsOf(out["tickets"], d.Tickets)
 	rowsOf(out["uploads"], d.Uploads)
 	rowsOf(out["gitkeys"], d.GitKeys)
+	b, _ := json.Marshal(d.Settings)
+	out["settings"]["server"] = row{0, string(b)}
 	return out
 }
 
@@ -309,6 +333,8 @@ func (d *DB) put(t, id string, data []byte) error {
 		return putIn(d.Uploads, id, data)
 	case "gitkeys":
 		return putIn(d.GitKeys, id, data)
+	case "settings":
+		return json.Unmarshal(data, &d.Settings)
 	}
 	return fmt.Errorf("ukendt tabel %s", t)
 }

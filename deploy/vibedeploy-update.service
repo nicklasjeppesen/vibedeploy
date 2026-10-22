@@ -1,0 +1,13 @@
+# Gem som /etc/systemd/system/vibedeploy-update.service (vibedeploy install gør det selv).
+# Installerer en ny, signeret version af Vibe Deploy. Startes af vibedeploy-update.path, når
+# dashboardet beder om det (knappen «Opdater nu» eller automatisk om natten). Kører som root,
+# fordi binæren i /usr/local/bin og tjenesten kun må ændres af root.
+[Unit]
+Description=Vibe Deploy: installér en ny version
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/vibedeploy update -data /var/lib/vibedeploy -addr 127.0.0.1:8080
+TimeoutStartSec=15min
