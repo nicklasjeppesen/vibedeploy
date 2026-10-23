@@ -46,6 +46,7 @@ Vibe Deploy er ét Go-program (standardbiblioteket plus `modernc.org/sqlite`), d
 | `setup.go` | Statussiden på `http://<IP>` under installationen (DNS og https) |
 | `auth.go` | Adgangskoder (PBKDF2), dashboard-sessioner, `requireUser`, CSRF-tjek |
 | `access.go` | Roller og synlighed (`canBuild`, `canManage`, `canOpen`), login foran apps, personer og invitationer |
+| `ratelimit.go` | Grænse for forkerte loginforsøg pr. IP og pr. konto (`loginLimiter`), besøgendes IP (`clientIP`) |
 | `reset.go` | Engangslinks til ny adgangskode (`/reset/<token>`), knappen på Personer og kommandoen `reset-password` |
 | `oauth.go` | OAuth 2.1 med PKCE og dynamisk klientregistrering, så AI-værktøjer kan logge ind |
 | `mcp.go` | MCP-endpointet, værktøjsdefinitioner og `callTool`, plus modtagelse af uploads |
@@ -139,6 +140,16 @@ Kun brugere med bygge-ret (`canBuild`) kan forbinde en AI, og `mcpAuth` tjekker 
 - `canManage(app, bruger)`: må styre appen (ejeren af appen eller serverens ejer).
 - `canOpen(app, bruger)`: må åbne appen (ud fra synligheden).
 - En AI handler som sin bruger: `callTool` lader kun den bruger se og ændre apps, som vedkommende må styre.
+
+### Forkerte loginforsøg (`ratelimit.go`)
+
+- `loginLimiter` tæller forkerte forsøg i et vindue på 15 minutter, pr. IP (`ip:…`, grænse 20) og pr. e-mail
+  (`konto:…`, grænse 5; også e-mails, der ikke findes, så svaret ikke afslører konti). Nås en grænse, låses
+  login fra IP'en eller til kontoen i 15 minutter, også med rigtig adgangskode (svar 429).
+- `loginSubmit` tjekker `blocked` før adgangskoden, kalder `fail` ved fejl og `success` (nulstiller kun kontoens
+  tæller) ved et rigtigt login. `signupSubmit` tæller forkerte opsætningskoder pr. IP.
+- `clientIP` bruger den sidste adresse i `X-Forwarded-For`, men kun når forbindelsen kommer fra loopback (Caddy).
+- Alt ligger i hukommelsen. Links til ny adgangskode (`reset.go`) er ikke omfattet, så ejeren ikke kan låses ude.
 
 ### Ny adgangskode (`reset.go`)
 

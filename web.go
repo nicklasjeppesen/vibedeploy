@@ -340,7 +340,15 @@ func (s *Server) signupSubmit(w http.ResponseWriter, r *http.Request) {
 	fail := func(msg string) {
 		s.page(w, r, "signup.html", "Opret konto", map[string]any{"Err": msg, "Name": name, "Email": email, "NeedCode": s.needSetupCode()})
 	}
+	ip := clientIP(r)
+	if d := s.limiter().blocked(ip, "opsaetningskode:"+ip); d > 0 {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusTooManyRequests)
+		fail(lockedText(d))
+		return
+	}
 	if !s.checkSetupCode(r.PostForm.Get("setupcode")) {
+		s.limiter().fail(ip, "opsaetningskode:"+ip)
 		time.Sleep(600 * time.Millisecond)
 		fail("Opsætningskoden er forkert. Den står i serverens log, hvor programmet blev startet.")
 		return
@@ -395,6 +403,16 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = r.ParseForm()
 	email, pw, next := strings.TrimSpace(r.PostForm.Get("email")), r.PostForm.Get("password"), safeNext(r.PostForm.Get("next"))
+	ip := clientIP(r)
+	locked := func(d time.Duration) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusTooManyRequests)
+		s.page(w, r, "login.html", "Log ind", map[string]any{"Err": lockedText(d), "Next": next})
+	}
+	if d := s.limiter().blocked(ip, email); d > 0 { // også med den rigtige adgangskode
+		locked(d)
+		return
+	}
 	var found *User
 	for _, u := range s.st.Snapshot().Users {
 		if strings.EqualFold(u.Email, email) {
@@ -402,10 +420,22 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if found == nil || !checkPassword(found, pw) {
+		ipLocked, accLocked := s.limiter().fail(ip, email)
+		if ipLocked {
+			fmt.Printf("Login låst i %s for IP %s efter %d forkerte forsøg\n", loginLockout, ip, loginMaxPerIP)
+		}
+		if accLocked {
+			fmt.Printf("Login låst i %s for kontoen %q efter %d forkerte forsøg (seneste fra %s)\n", loginLockout, email, loginMaxPerAccount, ip)
+		}
 		time.Sleep(600 * time.Millisecond) // gør gætteri langsommere
+		if d := s.limiter().blocked(ip, email); d > 0 {
+			locked(d)
+			return
+		}
 		s.page(w, r, "login.html", "Log ind", map[string]any{"Err": "Forkert e-mail eller adgangskode.", "Next": next})
 		return
 	}
+	s.limiter().success(email)
 	if err := s.startSession(w, r, found.ID); err != nil {
 		http.Error(w, "Kunne ikke starte session", 500)
 		return

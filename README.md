@@ -114,6 +114,19 @@ Serveren har **én ejer**, som inviterer andre (familie, kolleger):
 - Fjernes en persons bygge-ret, dør AI-adgangen med det samme. Fjernes personen, flyttes vedkommendes apps til ejeren og bliver private.
 - Ejeren kan altid se og åbne alt. Apps kører på samme maskine, så inviter kun folk, du stoler på.
 
+### Forkerte loginforsøg
+
+Hvert forkert forsøg tager lidt over et halvt sekund. Derudover:
+
+- **5 forkerte forsøg på samme konto inden for 15 minutter** låser login til kontoen i 15 minutter, uanset hvilken
+  IP-adresse forsøgene kommer fra. Det stopper gætteri på din adgangskode fra mange maskiner.
+- **20 forkerte forsøg fra samme IP-adresse inden for 15 minutter** låser login fra den IP i 15 minutter, uanset
+  konto. Det stopper én maskine, der prøver mange konti.
+- Mens låsen gælder, virker heller ikke den rigtige adgangskode. Siden siger, hvor mange minutter der er tilbage.
+  Et link til ny adgangskode virker stadig, så du kan aldrig blive låst helt ude.
+- Forkerte opsætningskoder ved den første konto tæller også med pr. IP.
+- Hver lås skrives i serverens log (`journalctl -u vibedeploy`).
+
 ### Glemt adgangskode
 
 Der sendes ingen mails. I stedet bruges et engangslink, der virker én gang i en time:
@@ -200,7 +213,8 @@ Fejler en ny version, kører den forrige videre.
 - Én container og én port pr. app: ingen separat database eller flere tjenester (docker-compose).
 - Under udrulning uden nedetid kører den forrige version kort samtidig med den nye. En app, der ændrer sin database
   ved opstart (migrationer), skal kunne tåle det.
-- Ingen begrænsning af loginforsøg ud over en kort forsinkelse.
+- Tællerne for forkerte loginforsøg ligger i hukommelsen og starter forfra, når Vibe Deploy genstarter. Der er ingen
+  to-trins login endnu.
 - Intet https lokalt. Brug Caddy foran på en rigtig server.
 - Serveren kan starte containere, så den, der kan logge ind, har i praksis stor magt på maskinen.
   Kør den som en bruger uden unødige rettigheder, og eksponér ikke Docker-socketen.

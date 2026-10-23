@@ -150,6 +150,10 @@ journalctl -u vibedeploy | grep Opsætningskode
   `/etc/vibedeploy/secret.key` og brug den nye tjenestefil. Slet `state.json.importeret`, når alt virker.
 - **Certifikater:** Caddy henter ét certifikat pr. app, første gang adressen besøges. Let's Encrypt har grænser for, hvor mange der kan udstedes pr. tidsrum, så det er fint til få apps. Til mange apps: brug et wildcard-certifikat via Caddys DNS-udvidelse for din domæneudbyder.
 - **Fejl med certifikater:** `journalctl -u caddy -e`.
+- **Låst login:** efter 5 forkerte forsøg på en konto eller 20 fra én IP (inden for 15 minutter) låses login i 15
+  minutter. Se hvem og hvorfra med `journalctl -u vibedeploy | grep "Login låst"`. Vil du ikke vente, så genstart
+  tjenesten (`systemctl restart vibedeploy`); tællerne ligger kun i hukommelsen. Caddy sætter `X-Forwarded-For`,
+  som Vibe Deploy kun stoler på, når forespørgslen kommer fra `127.0.0.1`.
 - **Glemt adgangskode:** `sudo vibedeploy reset-password din@email.dk` giver et link til en ny adgangskode (virker én
   gang i en time). Kommandoen læser `/etc/vibedeploy/secret.key` (derfor `sudo`) og beder den kørende tjeneste på
   `127.0.0.1:8080` om at gemme linket; forespørgslen er signeret med en nøgle udledt af `secret.key`, så andre brugere

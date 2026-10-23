@@ -41,6 +41,9 @@ type Server struct {
 
 	resetKey []byte // signerer forespørgsler fra «vibedeploy reset-password» (reset.go)
 
+	limitOnce sync.Once
+	limit     *loginLimiter // forkerte loginforsøg pr. IP og konto (ratelimit.go)
+
 	codeMu    sync.Mutex
 	setupCode string // kræves til første konto, når serveren ikke kører på localhost
 }
