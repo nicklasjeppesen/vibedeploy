@@ -25,6 +25,8 @@ func TestInstallRender(t *testing.T) {
 	for _, bad := range []installConfig{
 		{Domain: "example.com", Email: "a@b.dk", SetupCode: "123456789012"},
 		{Domain: "min-server.dk", Email: "ingen", SetupCode: "123456789012"},
+		{Domain: "min-server.dk", Email: "nicklas\u200b@live.dk", SetupCode: "123456789012"}, // usynligt tegn
+		{Domain: "min-server.dk", Email: "nøgle@live.dk", SetupCode: "123456789012"},
 		{Domain: "min server", Email: "a@b.dk", SetupCode: "123456789012"},
 		{Domain: "min-server.dk", Email: "a@b.dk", SetupCode: "kort"},
 		{Domain: "min-server.dk", Email: "a@b.dk", SetupCode: "vælg-en-lang-kode-selv"},

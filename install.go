@@ -142,6 +142,10 @@ func (c *installConfig) ask() error {
 	return nil
 }
 
+// emailRe accepterer kun almindelige ASCII-tegn. Let's Encrypt afviser e-mails med skjulte eller
+// ikke-ASCII-tegn (fx et usynligt tegn fra copy/paste), og så kan der aldrig hentes et certifikat.
+var emailRe = regexp.MustCompile(`^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$`)
+
 // validate tjekker domæne, e-mail og opsætningskode.
 func (c *installConfig) validate() error {
 	c.Domain = strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(c.Domain), "https://"), "http://"), "/"))
@@ -151,8 +155,9 @@ func (c *installConfig) validate() error {
 	if c.Domain == placeholder {
 		return errors.New("skriv dit eget domæne")
 	}
-	if !strings.Contains(c.Email, "@") || strings.ContainsAny(c.Email, " \n{}") || c.Email == placeholderE {
-		return fmt.Errorf("«%s» er ikke en gyldig e-mail", c.Email)
+	c.Email = strings.TrimSpace(c.Email)
+	if !emailRe.MatchString(c.Email) || c.Email == placeholderE {
+		return fmt.Errorf("«%s» er ikke en gyldig e-mail. Skriv den med almindelige bogstaver (ingen skjulte tegn fra copy/paste, ingen æøå)", c.Email)
 	}
 	if c.SetupCode == "vælg-en-lang-kode-selv" {
 		return errors.New("vælg din egen opsætningskode (VIBEDEPLOY_SETUP_CODE)")
