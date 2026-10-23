@@ -150,6 +150,11 @@ journalctl -u vibedeploy | grep Opsætningskode
   `/etc/vibedeploy/secret.key` og brug den nye tjenestefil. Slet `state.json.importeret`, når alt virker.
 - **Certifikater:** Caddy henter ét certifikat pr. app, første gang adressen besøges. Let's Encrypt har grænser for, hvor mange der kan udstedes pr. tidsrum, så det er fint til få apps. Til mange apps: brug et wildcard-certifikat via Caddys DNS-udvidelse for din domæneudbyder.
 - **Fejl med certifikater:** `journalctl -u caddy -e`.
+- **Glemt adgangskode:** `sudo vibedeploy reset-password din@email.dk` giver et link til en ny adgangskode (virker én
+  gang i en time). Kommandoen læser `/etc/vibedeploy/secret.key` (derfor `sudo`) og beder den kørende tjeneste på
+  `127.0.0.1:8080` om at gemme linket; forespørgslen er signeret med en nøgle udledt af `secret.key`, så andre brugere
+  på maskinen ikke kan lave links. Ligger nøglen et andet sted: `-key-file`. Tjenesten skal køre en version, der har
+  kommandoen (v0.3.0 eller nyere), ellers svarer den med en fejl.
 - **Docker-gruppen er i praksis root.** Den, der kan få tjenesten til at starte containere, har stor magt på maskinen. Hold serveren opdateret (`apt install unattended-upgrades`), og brug en stærk adgangskode.
 - **Opdatering af Vibe Deploy:** under siden **Server** står, om der er en ny version. Tryk «Opdater nu», eller slå
   automatisk opdatering til og vælg hvornår: hver dag eller en bestemt ugedag, et klokkeslæt og en tidszone

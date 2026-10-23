@@ -19,13 +19,14 @@ func TestAllPagesRender(t *testing.T) {
 		"consent.html": {"Client": "Claude", "P": authzParams{"c", "r", "s", "ch"}},
 		"signup.html":  {"NeedCode": true, "Err": "fejl"},
 		"login.html":   {"Next": "/"},
+		"reset.html":   {"Name": "Mette", "Err": "fejl"},
 		"invite.html":  {"Err": "fejl"},
 		"message.html": {"Text": "hej", "Back": "/"},
 		"gitnew.html":  {"F": gitNewForm{Port: "8080", Err: "fejl", Key: &ErrNeedKey{Public: "ssh-ed25519 AAA", AddURL: "https://x", Repo: "h/p", NewKey: true}}},
 		"people.html": {"People": []struct {
 			*User
 			Apps int
-		}{{owner, 2}}, "NewLink": "http://l/invite/x"},
+		}{{owner, 2}}, "NewLink": "http://l/invite/x", "ResetLink": "http://l/reset/x", "ResetName": "Mette"},
 	}
 	cases["server.html"] = map[string]any{"Tiles": tiles(HostStats{CPUOK: true, CPU: 40, Cores: 2, MemOK: true, MemUsed: 3 << 30, MemTotal: 4 << 30}),
 		"Charts":   []chart{{"CPU", lineChart("CPU", []Sample{{T: time.Now().Add(-time.Minute), CPU: 10}, {T: time.Now(), CPU: 50}}, func(x Sample) float64 { return x.CPU })}},

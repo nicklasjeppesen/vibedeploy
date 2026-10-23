@@ -39,6 +39,8 @@ type Server struct {
 	addr      string
 	publicURL string
 
+	resetKey []byte // signerer forespørgsler fra «vibedeploy reset-password» (reset.go)
+
 	codeMu    sync.Mutex
 	setupCode string // kræves til første konto, når serveren ikke kører på localhost
 }
@@ -56,6 +58,9 @@ func main() {
 			return
 		case "version", "-version", "--version":
 			fmt.Println(version)
+			return
+		case "reset-password":
+			runResetPassword(os.Args[2:])
 			return
 		case "keygen":
 			runKeygen(os.Args[2:])
@@ -108,6 +113,7 @@ func main() {
 	}
 
 	s := &Server{st: st, rt: rt, domain: *domain, addr: *addr, publicURL: strings.TrimRight(*public, "/")}
+	s.resetKey = resetMACKey(key)
 	s.mgr = NewManager(st, rt, abs)
 	s.mon = NewMonitor(abs, rt)
 	s.upd = NewUpdater(abs, st)

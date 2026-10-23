@@ -108,6 +108,19 @@ Serveren har **én ejer**, som inviterer andre (familie, kolleger):
 - En AI handler som den bruger, den er forbundet med: den kan kun se og ændre den brugers egne apps. En ny app godkendes af sin ejer.
 - Fjernes en persons bygge-ret, dør AI-adgangen med det samme. Fjernes personen, flyttes vedkommendes apps til ejeren og bliver private.
 - Ejeren kan altid se og åbne alt. Apps kører på samme maskine, så inviter kun folk, du stoler på.
+
+### Glemt adgangskode
+
+Der sendes ingen mails. I stedet bruges et engangslink, der virker én gang i en time:
+
+- **En anden person har glemt sin:** under **Personer** trykker ejeren «Link til ny adgangskode» ud for personen og
+  sender linket videre, som med en invitation.
+- **Ejeren har glemt sin:** log ind på serveren, og kør `sudo vibedeploy reset-password din@email.dk`. Kommandoen
+  skriver et link ud, som du åbner i browseren. Den virker for alle konti.
+
+Et nyt link gør det forrige ugyldigt. Når den nye adgangskode er gemt, logges kontoen ud alle andre steder
+(dashboard og apps). AI-forbindelserne virker stadig; fjern dem under «Forbind din AI», hvis du er bange for, at
+nogen har fået adgang.
 - Opgraderer du fra en tidligere version, bliver den første konto ejer, og eksisterende apps bliver **private**.
 
 ## Sådan virker koden
@@ -132,7 +145,7 @@ lægges den gamle tilbage. Appene kører videre under opdateringen. Før den fø
 se «Signering» i `DEPLOY.md`, også om hvad du gør, hvis nøglen bliver væk eller lækker. Signeringsnøglen
 (`release-signing.key`) er ikke det samme som serverens `secret.key`, der krypterer appenes hemmeligheder.
 
-Kommandoer: `vibedeploy version`, `vibedeploy update [-check]`, `vibedeploy keygen` og `vibedeploy sign` (til releases).
+Kommandoer: `vibedeploy version`, `vibedeploy update [-check]`, `vibedeploy reset-password <e-mail>` (link til ny adgangskode), `vibedeploy keygen` og `vibedeploy sign` (til releases).
 
 ## Prøv det
 
@@ -170,27 +183,24 @@ Fejler en ny version, kører den forrige videre.
 
 ## Kendt begrænset (prototype)
 
-- **Docker-delen er kun delvist afprøvet:** `deploy_image` (hent, start, fejl ved privat image) er afprøvet mod rigtig Docker med images fra Docker Hub og ghcr.io. `docker build`-vejen er ikke. Demo-runtime og resten er testet.
+- **Afprøvet på en rigtig server** (Hetzner, Ubuntu, DuckDNS-domæne): `install.sh`, Caddy med certifikater fra Let's Encrypt (også pr. app), en app bygget med `docker build` fra et offentligt og et privat GitHub-repo (deploy key over SSH), en ny version uden nedetid og en automatisk opdatering af Vibe Deploy til en signeret release. `deploy_image` er afprøvet mod rigtig Docker med images fra Docker Hub og ghcr.io.
 - Mister du nøglen (`secret.key`), kan hemmelighederne ikke læses igen. Gem en kopi et sikkert sted, adskilt fra backuppen af data.
 - Login-sessioner og AI-tokens gemmes ukrypteret i `state.db` (som før i state.json). Kun hemmeligheder krypteres.
 - Historikken på siden «Server» ligger kun i hukommelsen og starter forfra, når Vibe Deploy genstartes.
-- `install.sh` og `vibedeploy install` er tjekket for syntaks og med tests, og Caddyfilen er valideret med Caddy, men hele installationen er ikke kørt på en rigtig server endnu.
-- `vibedeploy update` er kørt for alvor (som root, med rigtige binærer, signatur og tilbagerulning), men med en falsk
-  `systemctl`. De to systemd-enheder og `lb_try_duration` i Caddy er ikke afprøvet på en rigtig server.
+- Tilbagerulning ved en opdatering, der ikke svarer, er kun afprøvet med tests og en falsk `systemctl`, ikke på en rigtig server.
 - Opdateringen af Vibe Deploy har kun én kanal (nyeste release). Der er ingen beta-kanal og ingen mulighed for at
   springe en bestemt version over, ud over at en version, der er rullet tilbage, ikke prøves igen automatisk.
 - Backup tages, mens appen kører. En app, der skriver i en database lige i det øjeblik, kan give en backup, der ikke er helt konsistent. Brug SQLite med WAL, eller stop appen før en manuel backup.
 - `/data`-mappen har skriveadgang for alle (0777), fordi containere ofte kører som en anden bruger end serveren. Forældremappen er lukket (0700), så andre brugere på maskinen kan ikke komme ind.
 - Én container og én port pr. app: ingen separat database eller flere tjenester (docker-compose).
-- Udrulning uden nedetid er testet med demo-runtime'n, ikke mod rigtig Docker. En app, der ændrer sin database
-  ved opstart (migrationer), skal kunne tåle, at den forrige version kører kort samtidig.
+- Under udrulning uden nedetid kører den forrige version kort samtidig med den nye. En app, der ændrer sin database
+  ved opstart (migrationer), skal kunne tåle det.
 - Ingen begrænsning af loginforsøg ud over en kort forsinkelse.
 - Intet https lokalt. Brug Caddy foran på en rigtig server.
 - Serveren kan starte containere, så den, der kan logge ind, har i praksis stor magt på maskinen.
   Kør den som en bruger uden unødige rettigheder, og eksponér ikke Docker-socketen.
 - Eget domæne og skift af appnavn mangler.
 - Invitationer sendes ikke på mail; ejeren kopierer linket og sender det selv.
-- Ingen nulstilling af glemt adgangskode endnu.
-- Hentning fra **private** repos over SSH er ikke afprøvet mod en rigtig GitHub-konto (testmiljøet kunne ikke nå port 22). Offentlige repos og nøgle-flowet er testet.
+- Nulstilling af adgangskode sker med engangslinks, ikke med mail (se «Glemt adgangskode»). Der er ingen «Glemt adgangskode?»-mail på loginsiden.
 - Værtsnøglen for git-serveren godkendes første gang den ses (accept-new) og huskes derefter.
 - Ingen refresh-tokens: adgangen udløber efter 90 dage, og AI-værktøjet skal godkendes igen.

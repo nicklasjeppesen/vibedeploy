@@ -57,6 +57,7 @@ func flashText(code string) string {
 		"nodata":       "Appen har ingen data endnu, så der var intet at tage backup af.",
 		"restored":     "Data gendannet. Den tidligere data blev gemt som en backup først.",
 		"gitfetched":   "Nyeste version hentes fra git og bygges nu.",
+		"pwreset":      "Din nye adgangskode er gemt, og du er logget ud alle andre steder.",
 		"gitnew":       "Koden er hentet fra git. Se den igennem, og godkend den for at bygge og starte appen.",
 		"rekeyed":      "Nøglen er slettet. Næste hentning laver en ny, som skal tilføjes i repoet igen.",
 		"imagefetched": "Nyeste udgave af imaget hentes nu.",
@@ -129,6 +130,9 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /static/{file}", s.static)
 	mux.HandleFunc("GET /internal/tls-ask", s.tlsAsk)
 	mux.HandleFunc("GET /healthz", s.healthz)
+	mux.HandleFunc("POST /internal/reset-password", s.internalReset)
+	mux.HandleFunc("GET /reset/{token}", s.resetPage)
+	mux.HandleFunc("POST /reset/{token}", s.resetSubmit)
 	mux.HandleFunc("GET /{$}", s.requireUser(s.dashboard))
 	mux.HandleFunc("GET /signup", s.signupPage)
 	mux.HandleFunc("POST /signup", s.signupSubmit)
@@ -141,6 +145,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("POST /server/update", s.requireAdmin(s.serverUpdate))
 	mux.HandleFunc("POST /people/invite", s.requireAdmin(s.peopleInvite))
 	mux.HandleFunc("POST /people/invite/{token}/revoke", s.requireAdmin(s.peopleRevokeInvite))
+	mux.HandleFunc("POST /people/user/{id}/reset", s.requireAdmin(s.peopleReset))
 	mux.HandleFunc("POST /people/user/{id}/{action}", s.requireAdmin(s.peopleAction))
 	mux.HandleFunc("GET /invite/{token}", s.invitePage)
 	mux.HandleFunc("POST /invite/{token}", s.inviteSubmit)
@@ -182,6 +187,8 @@ func (s *Server) handler() http.Handler {
 			case r.URL.Path == "/healthz": // opdateringen spørger på 127.0.0.1
 				mux.ServeHTTP(w, r)
 			case r.URL.Path == "/internal/tls-ask": // Caddy spørger på 127.0.0.1, før den henter et certifikat til en app
+				mux.ServeHTTP(w, r)
+			case r.URL.Path == "/internal/reset-password": // kommandoen «vibedeploy reset-password» spørger på 127.0.0.1
 				mux.ServeHTTP(w, r)
 			case strings.HasPrefix(r.URL.Path, "/static/"):
 				mux.ServeHTTP(w, r)

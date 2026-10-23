@@ -23,6 +23,12 @@
 
 <section class="card flush">
   <h2 class="pad">Konti</h2>
+  {{if .Data.ResetLink}}
+  <div class="pad">
+    <div class="note warn">Send dette link til {{.Data.ResetName}}. Det virker én gang i en time, og et nyt link gør det gamle ugyldigt.</div>
+    <div class="urlbox"><code id="resetlink">{{.Data.ResetLink}}</code><button class="btn light" type="button" data-copy="resetlink">Kopiér</button></div>
+  </div>
+  {{end}}
   <ul class="versions">
   {{range .Data.People}}
     <li>
@@ -30,6 +36,7 @@
         <span class="muted small">{{.Email}} · {{.Apps}} {{if eq .Apps 1}}app{{else}}apps{{end}}</span></div>
       {{if ne .Role "owner"}}
       <div class="actions left">
+        <form method="post" action="/people/user/{{.ID}}/reset"><button class="btn ghost">Link til ny adgangskode</button></form>
         <form method="post" action="/people/user/{{.ID}}/builder"><button class="btn ghost">{{if .Builder}}Fjern bygge-ret{{else}}Giv bygge-ret{{end}}</button></form>
         <form method="post" action="/people/user/{{.ID}}/remove"><button class="btn danger">Fjern</button></form>
       </div>

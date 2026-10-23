@@ -57,6 +57,10 @@ gofmt -l .                    # skal være tom
   `update-request`; root-delen (`vibedeploy update`) henter selv den nyeste signerede release. Root-delen må kun røre
   faste filnavne direkte i data-mappen og kun med `rename`/`remove`/`writeFileAtomic`, som ikke følger symlinks.
   Lad den aldrig læse en sti, et filnavn eller en version fra en fil, serveren har skrevet.
+- **Interne endpoints på 127.0.0.1** (`/healthz`, `/internal/tls-ask`, `/internal/reset-password`) skal stå i
+  undtagelserne for besøg på IP-adressen i `handler` (`web.go`). Ellers omdirigeres de til domænet, og den, der
+  kalder (opdateringen, Caddy, kommandoen), fejler. Det skete for `tls-ask` i v0.2.1, så ingen app fik https.
+- **Nulstilling af adgangskode** gemmer kun et hash af linket. Lad aldrig MCP eller AI'en lave eller se links.
 - **Versioner** sættes med `-ldflags "-X main.version=vX.Y.Z"`. `dev` opdaterer sig aldrig. Tags skal være `vX.Y.Z`.
 
 ## Hemmelige filer: commit dem aldrig
@@ -85,14 +89,14 @@ offentlig og skal committes.
 
 | Fil | Indhold |
 |---|---|
-| `main.go` | Flag, underkommandoer (`install`, `update`, `version`, `keygen`, `sign`), opstart, nedlukning |
+| `main.go` | Flag, underkommandoer (`install`, `update`, `version`, `reset-password`, `keygen`, `sign`), opstart, nedlukning |
 | `deploy.go` | `Manager`: udgivelse, bygge-pipeline, udrulning uden nedetid, rollback, variabler, `Reconcile` |
 | `runtime.go` | `Runtime`-interfacet, Docker og demo, `instName`/`otherSlot`/`appOf`, `waitHealthy` |
 | `web.go` | Ruter, proxy til apps (`proxyApp`, `serving`), dashboard-handlere |
 | `mcp.go` | MCP-endpoint og de 13 værktøjer (`callTool`) |
 | `store.go` | Datamodel (`DB`, `App`, `Settings`), SQLite-lagring, `schemaVersion` |
 | `update.go`, `schedule.go`, `release.go`, `version.go`, `releasekey.go` | Selvopdatering og dens tidspunkt (valgt tidszone), signerede releases, versioner |
-| `access.go`, `auth.go`, `oauth.go` | Roller og deling, login og CSRF, OAuth 2.1 til AI-værktøjer |
+| `access.go`, `auth.go`, `oauth.go`, `reset.go` | Roller og deling, login og CSRF, OAuth 2.1 til AI-værktøjer, links til ny adgangskode |
 | `data.go`, `gitdeploy.go`, `gitnew.go`, `imagedeploy.go` | Upload, `/data`, backups; git og deploy keys; formularen «Ny app fra git»; færdige images |
 | `metrics*.go`, `serverpage.go`, `setup.go` | Siden Server, statussiden under installationen |
 | `install.go`, `install.sh`, `deploy/` | Installation, systemd-enheder, Caddyfile, cloud-init |

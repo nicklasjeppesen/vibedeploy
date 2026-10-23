@@ -46,6 +46,7 @@ Vibe Deploy er ét Go-program (standardbiblioteket plus `modernc.org/sqlite`), d
 | `setup.go` | Statussiden på `http://<IP>` under installationen (DNS og https) |
 | `auth.go` | Adgangskoder (PBKDF2), dashboard-sessioner, `requireUser`, CSRF-tjek |
 | `access.go` | Roller og synlighed (`canBuild`, `canManage`, `canOpen`), login foran apps, personer og invitationer |
+| `reset.go` | Engangslinks til ny adgangskode (`/reset/<token>`), knappen på Personer og kommandoen `reset-password` |
 | `oauth.go` | OAuth 2.1 med PKCE og dynamisk klientregistrering, så AI-værktøjer kan logge ind |
 | `mcp.go` | MCP-endpointet, værktøjsdefinitioner og `callTool`, plus modtagelse af uploads |
 | `deploy.go` | `Manager`: udgivelse, bygge-pipeline, genstart, rollback, variabler, hemmeligheder |
@@ -59,7 +60,7 @@ Vibe Deploy er ét Go-program (standardbiblioteket plus `modernc.org/sqlite`), d
 
 ## Opstart (`main`)
 
-0. Underkommandoer: `install`, `update`, `version`, `keygen`, `sign` (se nedenfor og `DEPLOY.md`).
+0. Underkommandoer: `install`, `update`, `version`, `reset-password`, `keygen`, `sign` (se nedenfor og `DEPLOY.md`).
 1. Læser flag (`-addr`, `-domain`, `-data`, `-runtime`, `-public-url`).
 2. Læser nøglen til hemmeligheder (`keyPath`), åbner `data/state.db` med `OpenStore` (flytter en gammel `state.json` over) og migrerer gamle data (første bruger bliver ejer, apps uden synlighed bliver private). Er data skrevet med et nyere skema (`Settings.Schema` > `schemaVersion`), nægter den at starte.
 3. Vælger runtime: `docker` (tjekker, at Docker kører) eller `demo`.
@@ -137,6 +138,18 @@ Kun brugere med bygge-ret (`canBuild`) kan forbinde en AI, og `mcpAuth` tjekker 
 - `canManage(app, bruger)`: må styre appen (ejeren af appen eller serverens ejer).
 - `canOpen(app, bruger)`: må åbne appen (ud fra synligheden).
 - En AI handler som sin bruger: `callTool` lader kun den bruger se og ændre apps, som vedkommende må styre.
+
+### Ny adgangskode (`reset.go`)
+
+- Et link er `/reset/<token>` (24 tilfældige bytes). Kun `resetHash(token)` gemmes, i `User.ResetHash` med
+  `ResetExpires` (1 time). Et nyt link overskriver det forrige, så der højst er ét pr. konto.
+- Ejeren laver links til andre på Personer (`peopleReset`, ikke til sig selv).
+- `vibedeploy reset-password <e-mail>` laver selv tokenet og sender kun hashet til `POST /internal/reset-password`
+  på `127.0.0.1`. Forespørgslen er signeret med HMAC (`resetMACKey`, udledt af `secret.key`) og gælder højst 5
+  minutter. Endpointet svarer kun på loopback uden `X-Forwarded-For` (som `tls-ask`) og skal derfor også være
+  tilladt i reglen for besøg på IP-adressen i `handler`. Klienten følger aldrig omdirigeringer.
+- Når adgangskoden gemmes (`resetSubmit`), slettes alle kontoens sessioner (også app-sessioner), linket bruges op,
+  og personen logges ind. Tokens til AI-værktøjer bevares med vilje. MCP kan aldrig nulstille adgangskoder.
 
 ## Udgivelse af en app
 
@@ -250,6 +263,9 @@ Alt, der rører containere, går gennem interfacet `Runtime` (`Build`, `Pull`, `
 - POST-formularer i dashboardet tjekkes med `sameOrigin` (Origin/Referer) oven på `SameSite=Lax`-cookies.
 - `/internal/tls-ask` bruges af Caddy til on-demand TLS: der udstedes kun certifikater til hoveddomænet og
   til apps, der findes. Kun kald direkte fra samme maskine accepteres.
+- Besøg på serverens IP-adresse sendes videre til domænet, undtagen `/`, `/static/`, `/healthz`,
+  `/internal/tls-ask` og `/internal/reset-password`. De tre sidste kaldes på `127.0.0.1` af hhv. opdateringen,
+  Caddy og kommandoen `reset-password`, og de følger ikke omdirigeringer. Et nyt internt endpoint skal også herind.
 
 ## Opdatering af Vibe Deploy (`update.go`, `release.go`)
 

@@ -28,6 +28,8 @@ type User struct {
 	Role                        string // "owner" (administrator) eller "member"
 	Builder                     bool   // må forbinde en AI og udgive egne apps
 	Created                     time.Time
+	ResetHash                   string    `json:",omitempty"` // hash af et engangslink til ny adgangskode (reset.go)
+	ResetExpires                time.Time `json:",omitempty"`
 }
 
 // Session er enten en dashboard-session (AppSlug tom) eller en login til én bestemt app.

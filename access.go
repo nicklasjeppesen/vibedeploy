@@ -217,6 +217,11 @@ func (s *Server) peoplePage(w http.ResponseWriter, r *http.Request, u *User) {
 // renderPeople viser brugere, antal apps pr. bruger og aktive invitationer.
 // newLink er et netop oprettet invitationslink, som kun vises denne ene gang.
 func (s *Server) renderPeople(w http.ResponseWriter, r *http.Request, newLink string) {
+	s.renderPeopleWith(w, r, map[string]any{"NewLink": newLink})
+}
+
+// renderPeopleWith viser siden Personer med ekstra felter, fx et netop lavet link til ny adgangskode.
+func (s *Server) renderPeopleWith(w http.ResponseWriter, r *http.Request, extra map[string]any) {
 	db := s.st.Snapshot()
 	type invite struct {
 		Token   string
@@ -241,7 +246,11 @@ func (s *Server) renderPeople(w http.ResponseWriter, r *http.Request, newLink st
 	for _, p := range db.Users {
 		people = append(people, person{p, apps[p.ID]})
 	}
-	s.page(w, r, "people.html", "Personer", map[string]any{"People": people, "Invites": invs, "NewLink": newLink})
+	data := map[string]any{"People": people, "Invites": invs}
+	for k, v := range extra {
+		data[k] = v
+	}
+	s.page(w, r, "people.html", "Personer", data)
 }
 
 // peopleInvite opretter et invitationslink (virker én gang i 7 dage) og viser det.
