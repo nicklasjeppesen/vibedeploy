@@ -181,6 +181,8 @@ func (s *Server) handler() http.Handler {
 				s.setupStatus(w, r)
 			case r.URL.Path == "/healthz": // opdateringen spørger på 127.0.0.1
 				mux.ServeHTTP(w, r)
+			case r.URL.Path == "/internal/tls-ask": // Caddy spørger på 127.0.0.1, før den henter et certifikat til en app
+				mux.ServeHTTP(w, r)
 			case strings.HasPrefix(r.URL.Path, "/static/"):
 				mux.ServeHTTP(w, r)
 			default:

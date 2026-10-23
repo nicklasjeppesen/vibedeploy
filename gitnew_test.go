@@ -127,3 +127,25 @@ func TestGitNewPublicAndPrivate(t *testing.T) {
 		t.Fatalf("port eller ejer er forkert: %+v", a)
 	}
 }
+
+// TestTLSAskOnIP: Caddy spørger på http://127.0.0.1:8080/internal/tls-ask, før den henter et certifikat
+// til en app. Svaret må ikke være en omdirigering (Caddy følger dem ikke), ellers får ingen app https.
+func TestTLSAskOnIP(t *testing.T) {
+	m := newTestManager(t)
+	s := &Server{st: m.st, mgr: m, pages: loadPages(), domain: "min-server.dk"}
+	if _, err := m.Deploy("Testapp", 8080, map[string]string{"index.html": "hej"}, "", "u1"); err != nil {
+		t.Fatal(err)
+	}
+	ask := func(domain string) int {
+		req := httptest.NewRequest("GET", "http://127.0.0.1:8080/internal/tls-ask?domain="+domain, nil)
+		req.RemoteAddr = "127.0.0.1:50000"
+		rec := httptest.NewRecorder()
+		s.handler().ServeHTTP(rec, req)
+		return rec.Code
+	}
+	for d, want := range map[string]int{"testapp.min-server.dk": 200, "min-server.dk": 200, "findes-ikke.min-server.dk": 404, "testapp.andet.dk": 404} {
+		if got := ask(d); got != want {
+			t.Errorf("tls-ask for %s: %d, ventede %d", d, got, want)
+		}
+	}
+}
