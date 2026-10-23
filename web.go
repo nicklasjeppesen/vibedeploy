@@ -57,6 +57,7 @@ func flashText(code string) string {
 		"nodata":       "Appen har ingen data endnu, så der var intet at tage backup af.",
 		"restored":     "Data gendannet. Den tidligere data blev gemt som en backup først.",
 		"gitfetched":   "Nyeste version hentes fra git og bygges nu.",
+		"gitnew":       "Koden er hentet fra git. Se den igennem, og godkend den for at bygge og starte appen.",
 		"rekeyed":      "Nøglen er slettet. Næste hentning laver en ny, som skal tilføjes i repoet igen.",
 		"imagefetched": "Nyeste udgave af imaget hentes nu.",
 		"updating":     "Opdateringen er startet. Vibe Deploy genstarter om lidt, og siden er væk et øjeblik; dine apps kører videre.",
@@ -146,6 +147,8 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /connect", s.requireUser(s.connectPage))
 	mux.HandleFunc("POST /connect/token", s.requireUser(s.connectToken))
 	mux.HandleFunc("POST /connect/revoke", s.requireUser(s.connectRevoke))
+	mux.HandleFunc("GET /apps/new/git", s.requireUser(s.gitNewPage))
+	mux.HandleFunc("POST /apps/new/git", s.requireUser(s.gitNewSubmit))
 	mux.HandleFunc("GET /apps/{slug}", s.requireUser(s.appPage))
 	mux.HandleFunc("POST /apps/{slug}/{action}", s.requireUser(s.appAction))
 	mux.HandleFunc("GET /authorize", s.requireUser(s.authorizePage))

@@ -1,0 +1,33 @@
+{{define "content"}}
+<section class="narrow card">
+  <h1>Ny app fra git</h1>
+  <p class="muted">Serveren henter koden fra dit git-repo (fx GitHub eller GitLab) og bygger den. Repoet skal have en
+    <code>Dockerfile</code> i roden. Både offentlige og private repos virker.</p>
+  {{if .Data.F.Err}}<div class="note bad">{{.Data.F.Err}}</div>{{end}}
+  {{with .Data.F.Key}}
+  <div class="note warn">
+    <p>{{if .NewKey}}Repoet <b>{{.Repo}}</b> er privat (eller findes ikke), så serveren skal have lov til at læse det.{{else}}Serveren kunne stadig ikke hente <b>{{.Repo}}</b>. Er nøglen tilføjet til det rigtige repo, og findes repoet?{{end}}</p>
+    <p>Tilføj denne nøgle som <b>deploy key</b>{{if .AddURL}} (<a href="{{.AddURL}}" target="_blank" rel="noopener">åbn siden i repoet</a>){{else}} i repoets indstillinger under «Deploy keys»{{end}}.
+      Giv den et navn, fx «Vibe Deploy», og lad «Allow write access» være slået <b>fra</b>. Serveren skal kun læse.</p>
+    <div class="urlbox"><code id="gitkey">{{.Public}}</code><button class="btn light" type="button" data-copy="gitkey">Kopiér</button></div>
+    <p>Tryk derefter på «Hent koden» herunder.</p>
+  </div>
+  {{end}}
+  <form method="post" action="/apps/new/git" class="stack">
+    <label>Repo
+      <input name="repo" value="{{.Data.F.Repo}}" placeholder="ejer/repo eller https://github.com/ejer/repo" required autocomplete="off" autocapitalize="off" spellcheck="false">
+    </label>
+    <label>Navn på appen (valgfrit)
+      <input name="name" value="{{.Data.F.Name}}" placeholder="Bruger repoets navn, hvis du lader den stå tom" autocomplete="off">
+    </label>
+    <label>Gren (valgfrit)
+      <input name="branch" value="{{.Data.F.Branch}}" placeholder="Standardgrenen, fx main" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </label>
+    <label>Port, appen lytter på
+      <input name="port" value="{{.Data.F.Port}}" inputmode="numeric" placeholder="8080">
+    </label>
+    <p class="muted small">Er repoet privat, laver serveren en nøgle, som du kopierer ind i repoets indstillinger. Så trykker du på knappen igen.</p>
+    <div class="actions left"><button class="btn">{{if .Data.F.Key}}Hent koden{{else}}Hent koden fra git{{end}}</button> <a class="btn ghost" href="/">Annullér</a></div>
+  </form>
+</section>
+{{end}}

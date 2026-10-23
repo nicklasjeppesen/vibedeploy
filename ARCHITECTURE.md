@@ -51,6 +51,7 @@ Vibe Deploy er ét Go-program (standardbiblioteket plus `modernc.org/sqlite`), d
 | `deploy.go` | `Manager`: udgivelse, bygge-pipeline, genstart, rollback, variabler, hemmeligheder |
 | `data.go` | Udpakning af uploads, `/data`-mapper, backups, gendannelse og oprydning |
 | `gitdeploy.go` | Hentning fra git og deploy keys |
+| `gitnew.go` | Formularen «Ny app fra git» i dashboardet (`/apps/new/git`), bruger `DeployFromGit` |
 | `runtime.go` | `Runtime`-interfacet og de to udgaver: Docker og demo |
 | `web.go` | Ruter, proxy til apps, dashboard-sider og knapperne på appens side |
 | `web/` | HTML-skabeloner, CSS og JS (indlejret i binæren med `go:embed`) |
@@ -146,6 +147,7 @@ Der er tre veje ind, og de ender alle i `Manager.deployWith`:
 | `deploy_app` | Filerne som tekst i værktøjskaldet (højst 300 filer / 8 MB) | `Manager.Deploy` → `writeFiles` |
 | `prepare_upload` | Engangsadresse; AI'en kører `tar … \| curl -X PUT` | `upload` → `DeployArchive` → `extractTarGz` |
 | `deploy_from_git` | Serveren kloner selv repoet | `DeployFromGit` → `gitClone` → `cleanClone` |
+| Dashboard: Ny app fra git | Samme, fra en formular | `gitNewSubmit` → `DeployFromGit` |
 | `deploy_image` | Serveren henter et færdigt image (Docker Hub, ghcr.io …) | `DeployImage` → `parseImage`; `pipeline` kalder `Runtime.Pull` i stedet for `Build` |
 
 `deployWith` gør følgende:

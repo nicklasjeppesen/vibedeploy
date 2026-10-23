@@ -46,6 +46,10 @@ På en rigtig server med wildcard-DNS (`*.dit-domæne.dk`) bruger du `-domain di
   Kræver en terminal (fx Claude Code). Op til 200 MB pakket og 500 MB udpakket, billeder og andre binære filer er med,
   og det koster næsten ingen tokens. `node_modules`, `.git` og `.env` sendes ikke med; symlinks springes over.
 
+- **Ny app fra git i dashboardet:** på forsiden vælger man «Ny app fra git», skriver repoet (og evt. gren, navn og port)
+  og trykker «Hent koden». Offentlige repos hentes direkte. For et privat repo viser siden en deploy key, som man
+  kopierer ind i repoets indstillinger (kun læseadgang); derefter trykker man på knappen igen. Appen venter
+  bagefter på godkendelse, som alle nye apps. Det er samme kode som `deploy_from_git`.
 - `deploy_from_git`: serveren henter selv koden fra et git-repo (GitHub, GitLab m.fl.). Virker fra alle AI-værktøjer,
   også claude.ai uden terminal, og har samme grænser som upload. Offentlige repos hentes direkte. Private repos:
   første kald svarer med en **deploy key**, som ejeren tilføjer i repoets indstillinger (kun læseadgang), og så kører

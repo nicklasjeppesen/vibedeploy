@@ -21,6 +21,7 @@ func TestAllPagesRender(t *testing.T) {
 		"login.html":   {"Next": "/"},
 		"invite.html":  {"Err": "fejl"},
 		"message.html": {"Text": "hej", "Back": "/"},
+		"gitnew.html":  {"F": gitNewForm{Port: "8080", Err: "fejl", Key: &ErrNeedKey{Public: "ssh-ed25519 AAA", AddURL: "https://x", Repo: "h/p", NewKey: true}}},
 		"people.html": {"People": []struct {
 			*User
 			Apps int

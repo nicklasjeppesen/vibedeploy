@@ -20,6 +20,8 @@
     <h2>Klar til {{if .Data.Apps}}den næste{{else}}din første app{{end}}?</h2>
     <p class="muted">{{if .Data.Connected}}Bed din AI om at udgive appen.{{else}}Forbind først din AI, og bed den derefter om at udgive en app.{{end}}</p>
     {{if not .Data.Connected}}<a class="btn ghost" href="/connect">Forbind din AI</a>{{end}}
+    <p class="muted small">Eller hent koden selv fra et git-repo, offentligt eller privat.</p>
+    <a class="btn ghost" href="/apps/new/git">Ny app fra git</a>
   {{else}}
     <h2>{{if .Data.Apps}}Det er alt, der er delt med dig{{else}}Ingen apps er delt med dig endnu{{end}}</h2>
     <p class="muted">Når nogen deler en app med dig, dukker den op her.</p>
