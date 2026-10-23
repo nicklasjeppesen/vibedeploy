@@ -345,6 +345,9 @@ func (s *Server) callTool(r *http.Request, u *User, tool string, raw json.RawMes
 		if app.NeedsRestart {
 			out += " Der er ændringer, som kræver genstart."
 		}
+		if len(app.AllowIPs) > 0 {
+			out += " Appen kan kun åbnes fra disse IP-adresser (ejeren ændrer det i dashboardet): " + strings.Join(app.AllowIPs, ", ") + ". Andre får 403."
+		}
 		return out, nil
 	case "get_logs":
 		if a.Lines <= 0 || a.Lines > 400 {

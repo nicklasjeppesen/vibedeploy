@@ -46,6 +46,7 @@ Vibe Deploy er ét Go-program (standardbiblioteket plus `modernc.org/sqlite`), d
 | `setup.go` | Statussiden på `http://<IP>` under installationen (DNS og https) |
 | `auth.go` | Adgangskoder (PBKDF2), dashboard-sessioner, `requireUser`, CSRF-tjek |
 | `access.go` | Roller og synlighed (`canBuild`, `canManage`, `canOpen`), login foran apps, personer og invitationer |
+| `ipallow.go` | IP-begrænsning pr. app (`AllowIPs`): læsning af adresser og CIDR-områder, `ipAllowed`, tjekkes først i `proxyApp` |
 | `ratelimit.go` | Grænse for forkerte loginforsøg pr. IP og pr. konto (`loginLimiter`), besøgendes IP (`clientIP`) |
 | `reset.go` | Engangslinks til ny adgangskode (`/reset/<token>`), knappen på Personer og kommandoen `reset-password` |
 | `oauth.go` | OAuth 2.1 med PKCE og dynamisk klientregistrering, så AI-værktøjer kan logge ind |

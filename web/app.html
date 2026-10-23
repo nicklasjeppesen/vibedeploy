@@ -166,6 +166,18 @@
   </form>
 </section>
 
+<section class="card">
+  <h2>Kun fra bestemte IP-adresser</h2>
+  <p class="muted">Står feltet tomt, kan appen åbnes fra alle adresser. Skriver du adresser her, kan den kun åbnes derfra, også af dig, og det gælder oveni reglerne ovenfor. Dashboardet påvirkes ikke.</p>
+  <form method="post" action="/apps/{{$a.Slug}}/ipaccess" class="stack">
+    <label>Tilladte adresser <span class="hint">Én pr. linje: en adresse (<code>203.0.113.7</code>) eller et område (<code>192.168.1.0/24</code>).</span>
+      <textarea name="ips" rows="4" placeholder="203.0.113.7&#10;192.168.1.0/24" spellcheck="false">{{.Data.AllowIPsText}}</textarea>
+    </label>
+    <p class="muted small">Din adresse lige nu: <code>{{.Data.YourIP}}</code>{{if .Data.YourIPListed}} · den er på listen{{end}}</p>
+    <div class="inline"><button class="btn">Gem IP-begrænsning</button>{{if not .Data.YourIPListed}}<button class="btn ghost" formaction="/apps/{{$a.Slug}}/ipaddme">Tilføj min adresse</button>{{end}}</div>
+  </form>
+</section>
+
 {{with .Data.Git}}
 <section class="card">
   <h2>Hentes fra git</h2>

@@ -59,7 +59,7 @@ func TestAllPagesRender(t *testing.T) {
 			"People": []struct {
 				ID, Name string
 				Checked  bool
-			}{{"m", "Mette", true}}, "EnvRows": app.Env, "Prompt": "p", "Usage": map[string]string{"CPU": "1 %", "Mem": "20 MB", "Data": "1 KB", "Backups": "0 B"}}
+			}{{"m", "Mette", true}}, "EnvRows": app.Env, "AllowIPsText": "203.0.113.7\n192.168.1.0/24", "YourIP": "203.0.113.7", "Prompt": "p", "Usage": map[string]string{"CPU": "1 %", "Mem": "20 MB", "Data": "1 KB", "Backups": "0 B"}}
 	}
 	for name, data := range cases {
 		file := strings.Split(name, "#")[0]

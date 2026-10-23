@@ -41,6 +41,7 @@ h1 .status{font-size:15px;vertical-align:middle;margin-left:8px}
 .stack{display:flex;flex-direction:column;gap:16px}
 label{display:flex;flex-direction:column;gap:6px;font-weight:700;font-size:14px}
 .hint{font-weight:400;color:var(--muted)}
+textarea{padding:12px 14px;border-radius:12px;border:1px solid #AEB9C2;background:#fff;color:var(--ink);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;width:100%;resize:vertical}
 input,select{min-height:48px;padding:0 14px;border-radius:12px;border:1px solid #AEB9C2;background:#fff;color:var(--ink);font-family:inherit;font-size:16px;width:100%}
 .inline{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.inline input{flex:1;min-width:200px;width:auto}
 .kv{display:grid;grid-template-columns:minmax(120px,220px) 1fr;gap:12px;align-items:center}

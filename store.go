@@ -101,6 +101,7 @@ type App struct {
 	OwnerID      string
 	Visibility   string   // private (standard), shared, members, public
 	Access       []string // bruger-id'er, når Visibility er shared
+	AllowIPs     []string `json:",omitempty"` // tilladte IP-adresser og CIDR-områder; tom = alle (ipallow.go)
 	Port         int      // port appen lytter på inde i containeren
 	HostPort     int      // port på værten (kun 127.0.0.1), som trafikken sendes til lige nu
 	Slot         string   // aktiv container-plads: "" (vd-<slug>) eller "b" (vd-<slug>_b); skifter ved hver udrulning
@@ -152,7 +153,10 @@ type DB struct {
 // schemaVersion er versionen af databasens indhold. Den hæves, når en ny version ændrer data på en måde,
 // som en ældre version ikke kan læse rigtigt. En ældre binær nægter at starte på nyere data, så en
 // opdatering, der rulles tilbage, også lægger den tilsvarende backup af state.db tilbage (se update.go).
-const schemaVersion = 1
+//
+// 2: App.AllowIPs. En ældre version ville ignorere feltet og ved næste gemning fjerne IP-begrænsningen
+// i stilhed, så apps, der skulle være lukket, ville åbne sig.
+const schemaVersion = 2
 
 // Settings er serverens egne indstillinger (én række, «server», i tabellen settings).
 type Settings struct {

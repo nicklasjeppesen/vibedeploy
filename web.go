@@ -53,6 +53,8 @@ func flashText(code string) string {
 		"token":        "",
 		"revoked":      "Adgangen er fjernet for alle AI-værktøjer.",
 		"shared":       "Deling gemt.",
+		"ipaccess":     "IP-begrænsningen er gemt.",
+		"ipaddme":      "Din adresse er tilføjet. Appen kan nu åbnes herfra.",
 		"backup":       "Backup taget.",
 		"nodata":       "Appen har ingen data endnu, så der var intet at tage backup af.",
 		"restored":     "Data gendannet. Den tidligere data blev gemt som en backup først.",
@@ -234,6 +236,14 @@ func (s *Server) proxyApp(w http.ResponseWriter, r *http.Request, slug string) {
 		http.Error(w, "Der findes ingen app på denne adresse.", http.StatusNotFound)
 		return
 	}
+	if ip := clientIP(r); !ipAllowed(app.AllowIPs, ip) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprintf(w, `<!doctype html><meta charset=utf-8><title>%s</title>
+<body style="font:18px system-ui;max-width:560px;margin:18vh auto;padding:0 20px"><h1>%s</h1><p>Appen kan kun åbnes fra bestemte netværk, og din adresse (<code>%s</code>) er ikke en af dem.</p><p>Spørg appens ejer, om adressen kan tilføjes.</p></body>`,
+			template_escape(app.Name), template_escape(app.Name), template_escape(ip))
+		return
+	}
 	if r.URL.Path == "/_vd/auth" {
 		s.appAuth(w, r, slug)
 		return
@@ -256,12 +266,31 @@ func (s *Server) proxyApp(w http.ResponseWriter, r *http.Request, slug string) {
 			template_escape(app.Name), template_escape(app.Name), template_escape(statusLabel(app.Status)))
 		return
 	}
-	target, _ := url.Parse("http://127.0.0.1:" + strconv.Itoa(app.HostPort))
+	newAppProxy(app.HostPort).ServeHTTP(w, r)
+}
+
+// appTransport er den fælles forbindelsespulje til appernes containere. Standardtransporten
+// gemmer kun 2 ledige forbindelser pr. adresse, så en side med mange samtidige forespørgsler
+// (fx 30 billeder og scripts) ville åbne og lukke nye forbindelser hver gang.
+var appTransport = func() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.Proxy = nil // containerne ligger på 127.0.0.1; ingen HTTP_PROXY imellem
+	t.MaxIdleConns = 256
+	t.MaxIdleConnsPerHost = 32
+	t.IdleConnTimeout = 90 * time.Second
+	return t
+}()
+
+// newAppProxy laver en reverse proxy til en container på 127.0.0.1:port, der bruger den
+// fælles forbindelsespulje.
+func newAppProxy(port int) *httputil.ReverseProxy {
+	target, _ := url.Parse("http://127.0.0.1:" + strconv.Itoa(port))
 	rp := httputil.NewSingleHostReverseProxy(target)
+	rp.Transport = appTransport
 	rp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		http.Error(w, "Appen svarer ikke lige nu.", http.StatusBadGateway)
 	}
-	rp.ServeHTTP(w, r)
+	return rp
 }
 
 // serving afgør, om appens trafik skal sendes videre til containeren. Mens en ny version bygges
@@ -646,6 +675,9 @@ func (s *Server) appPage(w http.ResponseWriter, r *http.Request, u *User) {
 			people = append(people, person{p.ID, p.Name, ck})
 		}
 		data["People"] = people
+		data["AllowIPsText"] = strings.Join(a.AllowIPs, "\n")
+		data["YourIP"] = clientIP(r)
+		data["YourIPListed"] = len(a.AllowIPs) > 0 && ipAllowed(a.AllowIPs, clientIP(r))
 		var gk *GitKey
 		s.st.View(func(db *DB) {
 			if k := db.GitKeys[a.Slug]; k != nil {
@@ -830,6 +862,23 @@ func (s *Server) appAction(w http.ResponseWriter, r *http.Request, u *User) {
 		if err = s.mgr.SetAccess(slug, r.PostForm.Get("visibility"), r.PostForm["user"]); err == nil {
 			back("indstillinger", "shared")
 			return
+		}
+	case "ipaccess":
+		var allow []string
+		if allow, err = parseAllowIPs(r.PostForm.Get("ips")); err == nil {
+			if err = s.mgr.SetAllowIPs(slug, allow); err == nil {
+				back("indstillinger", "ipaccess")
+				return
+			}
+		}
+	case "ipaddme":
+		// Feltets indhold (også ændringer, der ikke er gemt endnu) plus den besøgendes adresse.
+		var allow []string
+		if allow, err = parseAllowIPs(r.PostForm.Get("ips") + "\n" + clientIP(r)); err == nil {
+			if err = s.mgr.SetAllowIPs(slug, allow); err == nil {
+				back("indstillinger", "ipaddme")
+				return
+			}
 		}
 	case "delete":
 		a, ok := s.mgr.get(slug)
