@@ -172,15 +172,31 @@ func (m *Manager) gitClone(repoURL, branch, dir, key string) (string, error) {
 	}
 	args = append(args, "--", repoURL, dir)
 	cmd := exec.CommandContext(ctx, "git", args...)
+	env := m.gitEnv(key)
+	cmd.Env = env
+	out, err := cmd.CombinedOutput()
+	return strings.TrimSpace(string(out)), err
+}
+
+// gitEnv er miljøet til git: aldrig spørgsmål om adgangskode, ingen systemopsætning, og key (hvis sat) som
+// SSH-nøgle med serverens egen known_hosts.
+func (m *Manager) gitEnv(key string) []string {
 	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=/bin/true", "GIT_CONFIG_NOSYSTEM=1")
 	if key != "" {
 		known := filepath.Join(m.dataDir, "keys", "known_hosts")
 		env = append(env, "GIT_SSH_COMMAND=ssh -i "+shQuote(key)+" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15"+
 			" -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="+shQuote(known))
 	}
-	cmd.Env = env
-	out, err := cmd.CombinedOutput()
-	return strings.TrimSpace(string(out)), err
+	return env
+}
+
+// cloneHead er commit'en i en netop klonet mappe (tom, hvis den ikke kan læses).
+func cloneHead(dir string) string {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	if sha := strings.TrimSpace(string(out)); err == nil && shaRe.MatchString(sha) {
+		return sha
+	}
+	return ""
 }
 
 // DeployFromGit henter appen fra et repo. Offentlige repos hentes direkte; private kræver appens deploy key.
@@ -197,6 +213,7 @@ func (m *Manager) DeployFromGit(name, repoIn, branch string, port int, note, own
 		return nil, fmt.Errorf("navnet «%s» kan ikke bruges som adresse; vælg et andet", name)
 	}
 	var needKey *ErrNeedKey
+	var commit string
 	how := "git: " + repo.Host + "/" + repo.Path
 	if branch != "" {
 		how += " (" + branch + ")"
@@ -205,6 +222,7 @@ func (m *Manager) DeployFromGit(name, repoIn, branch string, port int, note, own
 		// 1) prøv uden nøgle (offentligt repo)
 		out, err := m.gitClone(repo.HTTPS(), branch, dir, "")
 		if err == nil {
+			commit = cloneHead(dir)
 			return cleanClone(dir)
 		}
 		if strings.Contains(out, "Remote branch") || strings.Contains(out, "not found in upstream") {
@@ -230,6 +248,7 @@ func (m *Manager) DeployFromGit(name, repoIn, branch string, port int, note, own
 			needKey = &ErrNeedKey{Public: pub, AddURL: repo.AddKeyURL(), Repo: repo.Host + "/" + repo.Path}
 			return needKey
 		}
+		commit = cloneHead(dir)
 		return cleanClone(dir)
 	})
 	if needKey != nil {
@@ -238,7 +257,24 @@ func (m *Manager) DeployFromGit(name, repoIn, branch string, port int, note, own
 	if err != nil {
 		return nil, err
 	}
-	m.update(res.App.Slug, func(a *App) { a.Git = &GitSource{Repo: repo.HTTPS(), Branch: branch} })
+	m.update(res.App.Slug, func(a *App) {
+		g := &GitSource{Repo: repo.HTTPS(), Branch: branch}
+		if old := a.Git; old != nil && old.Repo == g.Repo && old.Branch == g.Branch {
+			g.Latest, g.Checked, g.CheckErr = old.Latest, old.Checked, old.CheckErr
+		}
+		if commit != "" {
+			g.Latest, g.Checked, g.CheckErr = commit, time.Now(), ""
+			for i := range a.Versions {
+				if a.Versions[i].N == res.VersionN {
+					a.Versions[i].Commit = commit
+				}
+			}
+		}
+		a.Git = g
+	})
+	if commit != "" {
+		m.logger(res.App.Slug)("Hentet commit %s fra git", shortSHA(commit))
+	}
 	return res, nil
 }
 

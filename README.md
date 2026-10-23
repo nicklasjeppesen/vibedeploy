@@ -56,6 +56,11 @@ På en rigtig server med wildcard-DNS (`*.dit-domæne.dk`) bruger du `-domain di
   man værktøjet igen. Hver app har sin egen nøgle, bundet til ejeren og repoet; den hemmelige del forlader aldrig serveren.
   Under appens Indstillinger kan man hente nyeste version fra git med ét klik eller lave en ny nøgle.
   Kræver `git` og `ssh` på serveren (`apt install git openssh-client`).
+- **Er appen den nyeste fra git?** Hver version husker, hvilken commit den er bygget fra, og appens side viser
+  «Kører nu: commit abc1234» og «Nyeste på git». Serveren tjekker kun git, når ejeren trykker «Tjek git nu» eller
+  «Hent nyeste version fra git» (kun den nyeste commit, uden at hente koden). Kører appen allerede den nyeste commit,
+  bygger hent-knappen ikke igen, men siger, at der ikke er noget nyt; «Byg igen alligevel» bygger alligevel.
+  Der udrulles aldrig en ny version, uden at ejeren selv har bedt om det.
 
 - `deploy_image`: serveren henter et færdigt image fra Docker Hub, GitHub (`ghcr.io`) eller et andet registry,
   fx `nginx:1.27` eller `ghcr.io/ejer/app:latest`. Intet bygges, og der skal ingen Dockerfile til. Er imaget privat,
@@ -201,6 +206,7 @@ Fejler en ny version, kører den forrige videre.
   Kør den som en bruger uden unødige rettigheder, og eksponér ikke Docker-socketen.
 - Eget domæne og skift af appnavn mangler.
 - Invitationer sendes ikke på mail; ejeren kopierer linket og sender det selv.
+- Versioner hentet fra git før v0.4.0 viser «ukendt commit», indtil der hentes en ny.
 - Nulstilling af adgangskode sker med engangslinks, ikke med mail (se «Glemt adgangskode»). Der er ingen «Glemt adgangskode?»-mail på loginsiden.
 - Værtsnøglen for git-serveren godkendes første gang den ses (accept-new) og huskes derefter.
 - Ingen refresh-tokens: adgangen udløber efter 90 dage, og AI-værktøjet skal godkendes igen.

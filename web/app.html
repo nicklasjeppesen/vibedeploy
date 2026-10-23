@@ -34,6 +34,10 @@
 <div class="note warn block">{{$a.StatusText}}</div>
 {{end}}
 
+{{if .Data.GitNew}}
+<div class="note idle block">Der var en ny version af appen på git, da du sidst tjekkede. <a href="/apps/{{$a.Slug}}?tab=indstillinger">Se og hent den</a></div>
+{{end}}
+
 {{if $a.NeedsRestart}}
 <div class="note idle block">Du har ændret indstillinger. Genstart appen for at anvende dem.
   <form method="post" action="/apps/{{$a.Slug}}/restart" class="inline"><button class="btn">Genstart appen</button></form></div>
@@ -73,7 +77,7 @@
   <ul class="versions">
   {{range .Data.Versions}}
     <li class="{{if .Current}}cur{{end}}">
-      <div><b>Version {{.N}}</b>{{if .Note}} · {{.Note}}{{end}}<br><span class="muted small">{{.Ago}}{{if .Failed}} · fejlede{{end}}{{if .Pruned}} · ryddet op{{end}}</span></div>
+      <div><b>Version {{.N}}</b>{{if .Note}} · {{.Note}}{{end}}{{if .Commit}} · commit <code>{{slice .Commit 0 7}}</code>{{end}}<br><span class="muted small">{{.Ago}}{{if .Failed}} · fejlede{{end}}{{if .Pruned}} · ryddet op{{end}}</span></div>
       {{if .Current}}<span class="status ok"><i></i>Kører nu</span>
       {{else if .CanBack}}<form method="post" action="/apps/{{$a.Slug}}/rollback"><input type="hidden" name="version" value="{{.N}}"><button class="btn ghost">Gå tilbage til denne</button></form>{{end}}
     </li>
@@ -166,12 +170,27 @@
 <section class="card">
   <h2>Hentes fra git</h2>
   {{if .Repo}}<p><b class="mono">{{.Repo}}</b>{{if .Branch}} · gren <code>{{.Branch}}</code>{{end}}</p>{{end}}
+  {{if $a.Git}}
+  <dl class="facts">
+    <dt>Kører nu</dt><dd>{{if .Commit}}commit <code>{{.Commit}}</code>{{else}}ukendt commit (hentet før Vibe Deploy huskede det){{end}}</dd>
+    <dt>Nyeste på git</dt><dd>{{if .Latest}}commit <code>{{.Latest}}</code>{{else}}ikke tjekket endnu{{end}}{{if .Checked}} <span class="muted small">· tjekket {{.Checked}}</span>{{end}}</dd>
+  </dl>
+  {{if .CheckErr}}<div class="note bad">Git kunne ikke tjekkes: {{.CheckErr}}</div>
+  {{else if .NewOnGit}}<div class="note warn">Der er en ny version på git. Tryk «Hent nyeste version fra git» for at bygge og udrulle den.</div>
+  {{else if .UpToDate}}<div class="note ok">Appen kører den nyeste version fra git.</div>{{end}}
+  <p class="muted small">Serveren tjekker kun git, når du trykker på en af knapperne herunder. En ny version går først live, når den svarer, så appen er ikke nede imens.</p>
+  {{end}}
   {{if .Public}}
   <p class="muted">Deploy key til private repos. Tilføj den i repoets indstillinger under «Deploy keys» med kun læseadgang{{if .AddURL}} (<a href="{{.AddURL}}" target="_blank" rel="noopener">åbn siden</a>){{end}}.</p>
   <div class="urlbox"><code id="gitkey">{{.Public}}</code><button class="btn light" type="button" data-copy="gitkey">Kopiér</button></div>
   {{end}}
   <div class="actions left">
-    {{if $a.Git}}<form method="post" action="/apps/{{$a.Slug}}/gitdeploy"><button class="btn">Hent nyeste version fra git</button></form>{{end}}
+    {{if $a.Git}}
+    {{if .UpToDate}}<form method="post" action="/apps/{{$a.Slug}}/gitcheck"><button class="btn">Tjek git nu</button></form>
+    <form method="post" action="/apps/{{$a.Slug}}/gitdeploy"><input type="hidden" name="force" value="1"><button class="btn ghost">Byg igen alligevel</button></form>
+    {{else}}<form method="post" action="/apps/{{$a.Slug}}/gitdeploy"><button class="btn">Hent nyeste version fra git</button></form>
+    <form method="post" action="/apps/{{$a.Slug}}/gitcheck"><button class="btn ghost">Tjek git nu</button></form>{{end}}
+    {{end}}
     {{if .Public}}<form method="post" action="/apps/{{$a.Slug}}/gitrekey"><button class="btn ghost">Lav en ny nøgle</button></form>{{end}}
   </div>
 </section>

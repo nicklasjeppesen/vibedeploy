@@ -52,6 +52,7 @@ Vibe Deploy er ét Go-program (standardbiblioteket plus `modernc.org/sqlite`), d
 | `deploy.go` | `Manager`: udgivelse, bygge-pipeline, genstart, rollback, variabler, hemmeligheder |
 | `data.go` | Udpakning af uploads, `/data`-mapper, backups, gendannelse og oprydning |
 | `gitdeploy.go` | Hentning fra git og deploy keys |
+| `gitwatch.go` | Tjek af nyeste commit på git (`git ls-remote`), når ejeren beder om det |
 | `gitnew.go` | Formularen «Ny app fra git» i dashboardet (`/apps/new/git`), bruger `DeployFromGit` |
 | `runtime.go` | `Runtime`-interfacet og de to udgaver: Docker og demo |
 | `web.go` | Ruter, proxy til apps, dashboard-sider og knapperne på appens side |
@@ -254,7 +255,18 @@ Alt, der rører containere, går gennem interfacet `Runtime` (`Build`, `Pull`, `
 3. Fejler det, laves en deploy key til appen (`ensureKey`, ed25519). Første gang returneres `ErrNeedKey`,
    og AI'en får den offentlige nøgle og et link til, hvor ejeren tilføjer den (`needKeyText`).
 4. Næste gang klones over ssh med nøglen. Nøglen er bundet til ejer og repo og forlader aldrig serveren.
-5. `cleanClone` fjerner `.git` og symlinks og håndhæver de samme størrelsesgrænser som upload.
+5. Commit'en læses (`cloneHead`), før `cleanClone` fjerner `.git` og symlinks og håndhæver de samme
+   størrelsesgrænser som upload. Den gemmes i `Version.Commit`.
+
+### Ny version på git? (`gitwatch.go`)
+
+- `CheckGit` spørger med `git ls-remote` (`latestCommit`: anonymt over https, ellers over ssh med appens deploy key)
+  om den nyeste commit og gemmer svaret i `GitSource.Latest`/`Checked`/`CheckErr`. `DeployFromGit` bevarer det
+  sidste tjek, når repo og gren er de samme, og sætter `Latest` til den hentede commit.
+- Git tjekkes kun, når ejeren trykker «Tjek git nu» (`appAction` «gitcheck») eller «Hent nyeste version fra git»
+  («gitdeploy»). Der er ingen baggrundstjek og ingen automatisk udrulning; det er et bevidst valg.
+- «gitdeploy» bygger ikke, hvis appen er live med den nyeste commit, medmindre formularen har `force=1`
+  («Byg igen alligevel»). MCP-værktøjet `deploy_from_git` bygger altid.
 
 ## Routing og sikkerhedsheaders (`web.go: handler`)
 

@@ -79,6 +79,7 @@ type Version struct {
 	Image   string // sat når bygningen er lykkedes
 	Dir     string
 	From    string // færdigt image, der hentes i stedet for at bygge (deploy_image)
+	Commit  string `json:",omitempty"` // git-commit, versionen er bygget fra (apps fra git)
 	Failed  bool
 	Pruned  bool // filer og image er ryddet op; kan ikke bruges til rollback
 }
@@ -118,8 +119,14 @@ type App struct {
 	Updated      time.Time
 }
 
-// GitSource husker, hvilket repo og hvilken gren en app hentes fra.
-type GitSource struct{ Repo, Branch string }
+// GitSource husker, hvilket repo og hvilken gren en app hentes fra, og hvad ejeren sidst så på git
+// (gitwatch.go). Commits er fulde SHA'er.
+type GitSource struct {
+	Repo, Branch string
+	Latest       string    `json:",omitempty"` // nyeste commit på grenen ved sidste tjek
+	Checked      time.Time `json:",omitempty"` // hvornår git sidst blev tjekket
+	CheckErr     string    `json:",omitempty"` // fejl ved sidste tjek (tom, når det lykkedes)
+}
 
 // GitKey er en deploy key, som kun må bruges af sin ejer og til ét bestemt repo.
 type GitKey struct {

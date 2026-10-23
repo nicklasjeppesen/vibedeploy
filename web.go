@@ -58,6 +58,9 @@ func flashText(code string) string {
 		"restored":     "Data gendannet. Den tidligere data blev gemt som en backup først.",
 		"gitfetched":   "Nyeste version hentes fra git og bygges nu.",
 		"pwreset":      "Din nye adgangskode er gemt, og du er logget ud alle andre steder.",
+		"gituptodate":  "Appen kører allerede den nyeste version fra git. Der er ikke noget nyt at hente.",
+		"gitchecked":   "Git er tjekket.",
+		"gitcheckfail": "Git kunne ikke tjekkes. Se fejlen under «Hentes fra git».",
 		"gitnew":       "Koden er hentet fra git. Se den igennem, og godkend den for at bygge og starte appen.",
 		"rekeyed":      "Nøglen er slettet. Næste hentning laver en ny, som skal tilføjes i repoet igen.",
 		"imagefetched": "Nyeste udgave af imaget hentes nu.",
@@ -587,6 +590,9 @@ func (s *Server) appPage(w http.ResponseWriter, r *http.Request, u *User) {
 	if tab == "log" {
 		data["Log"] = s.mgr.Logs(a.Slug, 200)
 	}
+	if a.Git != nil {
+		data["GitNew"] = gitState(a)["NewOnGit"]
+	}
 	if tab == "data" {
 		data["Backups"] = s.mgr.Backups(a.Slug)
 		empty, _ := dirEmpty(s.mgr.volumeDir(a.Slug))
@@ -621,6 +627,9 @@ func (s *Server) appPage(w http.ResponseWriter, r *http.Request, u *User) {
 			g := map[string]any{}
 			if a.Git != nil {
 				g["Repo"], g["Branch"] = a.Git.Repo, a.Git.Branch
+				for k, v := range gitState(a) {
+					g[k] = v
+				}
 			}
 			if gk != nil {
 				g["Public"] = gk.Public
@@ -635,6 +644,19 @@ func (s *Server) appPage(w http.ResponseWriter, r *http.Request, u *User) {
 		}
 	}
 	s.page(w, r, "app.html", a.Name, data)
+}
+
+// gitState er det, appens side viser om git: kørende og nyeste commit, om der er noget nyt, og automatikken.
+func gitState(a App) map[string]any {
+	g := a.Git
+	cur := currentCommit(a)
+	st := map[string]any{"Commit": shortSHA(cur), "Latest": shortSHA(g.Latest), "CheckErr": g.CheckErr}
+	if !g.Checked.IsZero() {
+		st["Checked"] = relTime(g.Checked)
+	}
+	st["UpToDate"] = cur != "" && g.Latest == cur
+	st["NewOnGit"] = g.Latest != "" && g.Latest != cur && a.Current > 0
+	return st
 }
 
 // appAction håndterer knapperne på appens side (godkend, afvis, genstart, stop, rollback,
@@ -734,6 +756,13 @@ func (s *Server) appAction(w http.ResponseWriter, r *http.Request, u *User) {
 			err = fmt.Errorf("appen er ikke hentet fra git")
 			break
 		}
+		// Er der ikke noget nyt på git, bygges der ikke (medmindre ejeren beder om det med «Byg igen»).
+		if r.PostForm.Get("force") != "1" {
+			if sha, cerr := s.mgr.CheckGit(slug); cerr == nil && sha != "" && sha == currentCommit(ap) && ap.Status == StatusLive {
+				back("indstillinger", "gituptodate")
+				return
+			}
+		}
 		var res *DeployResult
 		res, err = s.mgr.DeployFromGit(ap.Name, ap.Git.Repo, ap.Git.Branch, ap.Port, "Hentet fra git via dashboardet", ap.OwnerID)
 		var nk *ErrNeedKey
@@ -756,6 +785,13 @@ func (s *Server) appAction(w http.ResponseWriter, r *http.Request, u *User) {
 			back("oversigt", "imagefetched")
 			return
 		}
+	case "gitcheck":
+		if _, cerr := s.mgr.CheckGit(slug); cerr != nil {
+			back("indstillinger", "gitcheckfail")
+			return
+		}
+		back("indstillinger", "gitchecked")
+		return
 	case "gitrekey":
 		s.mgr.RemoveKey(slug)
 		back("indstillinger", "rekeyed")

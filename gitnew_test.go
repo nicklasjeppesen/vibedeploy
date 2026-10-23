@@ -77,8 +77,20 @@ func fakeGit(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
 	script := `#!/bin/sh
+# Commit'en, «git» svarer med, står i filen $FAKE_GIT_SHA_FILE (ellers en fast værdi).
+sha=1111111111111111111111111111111111111111
+[ -n "$FAKE_GIT_SHA_FILE" ] && [ -f "$FAKE_GIT_SHA_FILE" ] && sha=$(cat "$FAKE_GIT_SHA_FILE")
 for a; do last=$a; prev2=$prev; prev=$a; done
-url=$prev2
+case " $* " in
+  *" rev-parse "*) echo "$sha"; exit 0;;
+  *" ls-remote "*) url=$prev2;;
+  *) url=$prev2;;
+esac
+case " $* " in
+  *" ls-remote "*)
+    case "$url" in *"/pub/"*|git@*) printf '%s\t%s\n' "$sha" "$last"; exit 0;; esac
+    echo "fatal: Repository not found." >&2; exit 128;;
+esac
 case "$url" in
   *"/pub/"*|git@*) mkdir -p "$last" && printf 'FROM scratch\n' > "$last/Dockerfile" && mkdir -p "$last/.git"; exit 0;;
 esac
