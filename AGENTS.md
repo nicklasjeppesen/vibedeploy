@@ -60,6 +60,9 @@ gofmt -l .                    # skal være tom
 - **Interne endpoints på 127.0.0.1** (`/healthz`, `/internal/tls-ask`, `/internal/reset-password`) skal stå i
   undtagelserne for besøg på IP-adressen i `handler` (`web.go`). Ellers omdirigeres de til domænet, og den, der
   kalder (opdateringen, Caddy, kommandoen), fejler. Det skete for `tls-ask` i v0.2.1, så ingen app fik https.
+- **Live opdatering** (`events.go`): ændrer du en apps status uden `m.update`, så kald `m.notify(slug)`, ellers
+  opdateres siden først ved næste tjek (5 sek.). En ny langvarig handler skal også slutte på `s.closing()`, ellers
+  venter nedlukningen på den, og opdateringer af Vibe Deploy bliver langsommere.
 - **Nulstilling af adgangskode** gemmer kun et hash af linket. Lad aldrig MCP eller AI'en lave eller se links.
 - **Versioner** sættes med `-ldflags "-X main.version=vX.Y.Z"`. `dev` opdaterer sig aldrig. Tags skal være `vX.Y.Z`.
 
@@ -93,6 +96,7 @@ offentlig og skal committes.
 | `deploy.go` | `Manager`: udgivelse, bygge-pipeline, udrulning uden nedetid, rollback, variabler, `Reconcile` |
 | `runtime.go` | `Runtime`-interfacet, Docker og demo, `instName`/`otherSlot`/`appOf`, `waitHealthy` |
 | `web.go` | Ruter, proxy til apps (`proxyApp`, `serving`), dashboard-handlere |
+| `events.go` | Live opdatering af appens side (Server-Sent Events, `hub`, `appEvents`) |
 | `mcp.go` | MCP-endpoint og de 13 værktøjer (`callTool`) |
 | `store.go` | Datamodel (`DB`, `App`, `Settings`), SQLite-lagring, `schemaVersion` |
 | `update.go`, `schedule.go`, `release.go`, `version.go`, `releasekey.go` | Selvopdatering og dens tidspunkt (valgt tidszone), signerede releases, versioner |

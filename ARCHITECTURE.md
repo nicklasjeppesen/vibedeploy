@@ -58,6 +58,7 @@ Vibe Deploy er ét Go-program (standardbiblioteket plus `modernc.org/sqlite`), d
 | `gitnew.go` | Formularen «Ny app fra git» i dashboardet (`/apps/new/git`), bruger `DeployFromGit` |
 | `runtime.go` | `Runtime`-interfacet og de to udgaver: Docker og demo |
 | `web.go` | Ruter, proxy til apps, dashboard-sider og knapperne på appens side |
+| `events.go` | Live opdatering af appens side: `hub` og `/apps/<slug>/events` (Server-Sent Events) |
 | `web/` | HTML-skabeloner, CSS og JS (indlejret i binæren med `go:embed`) |
 | `deploy/` | Caddyfile, systemd-tjenesten og de to enheder til opdatering (`vibedeploy-update.service`/`.path`) |
 
@@ -279,6 +280,26 @@ Alt, der rører containere, går gennem interfacet `Runtime` (`Build`, `Pull`, `
   («gitdeploy»). Der er ingen baggrundstjek og ingen automatisk udrulning; det er et bevidst valg.
 - «gitdeploy» bygger ikke, hvis appen er live med den nyeste commit, medmindre formularen har `force=1`
   («Byg igen alligevel»). MCP-værktøjet `deploy_from_git` bygger altid.
+
+## Live opdatering af appens side (`events.go`, `web/app.js`)
+
+- `Manager.events` er en `hub`: hver åben side abonnerer på én app med en kanal (buffer 64). `publish` blokerer
+  aldrig; en fuld kanal springes over.
+- `m.update` og `deployWith` kalder `m.notify(slug)` («status»), og `m.logger` sender hver ny linje («log»).
+  `Delete`/`Reject` giver «gone». Ændrer ny kode en apps status uden `m.update`, skal den kalde `m.notify`.
+- `GET /apps/<slug>/events` (login + `canManage`) sender status som JSON (`statusEvent`), kun når den har ændret
+  sig, og tjekker desuden hvert 5. sekund, så en overset besked kommer frem. En kommentar hvert 25. sekund
+  holder forbindelsen åben, og `retry: 2000` får browseren til at forbinde igen efter 2 sekunder.
+- Strømmen slutter, når serveren lukker ned (`srv.RegisterOnShutdown(s.beginShutdown)` → `s.closing()`).
+  Ellers ville `srv.Shutdown` vente op til 10 sekunder på åbne strømme og gøre en opdatering langsommere.
+- `app.js` opdaterer `#live-status`, `#live-label`, `#live-busy`/`#live-text` og føjer loglinjer til
+  `#live-log` (ruller kun med, hvis man står nederst). Ændres status eller version, og appen ikke længere
+  arbejder, genindlæses siden uden `?m=…`, medmindre der er skrevet i en formular; så vises `#live-done`.
+
+- Forsiden lytter på `GET /events` (alle apps, nøglen `allApps` i hub'en; kun statusbeskeder). Serveren
+  sammenligner et fingeraftryk af de apps, brugeren må åbne (`homeFingerprint`), og sender kun `changed` uden
+  indhold, når det har ændret sig. `app.js` henter så forsiden igen og skifter `#home-live` ud. Beskeden
+  afslører altså intet om andre brugeres apps.
 
 ## Routing og sikkerhedsheaders (`web.go: handler`)
 

@@ -1,4 +1,7 @@
 {{define "content"}}
+<div data-home-live="/events" hidden></div>
+{{if .Data.Busy}}<noscript><meta http-equiv="refresh" content="3"></noscript>{{end}}
+<div id="home-live">
 <div class="head"><div>
   <h1>Dine apps</h1>
   <p class="muted">{{if .Data.Summary}}{{.Data.Summary}}.{{else}}Ingen apps endnu.{{end}}</p>
@@ -27,5 +30,6 @@
     <p class="muted">Når nogen deler en app med dig, dukker den op her.</p>
   {{end}}
   </article>
+</div>
 </div>
 {{end}}

@@ -23,6 +23,7 @@ type Manager struct {
 	dataDir string
 	mu      sync.Mutex
 	locks   map[string]*sync.Mutex
+	events  hub // sider, der følger med live (events.go)
 }
 
 // NewManager laver en Manager, der gemmer filer under dataDir.
@@ -86,7 +87,9 @@ func (m *Manager) logger(slug string) func(string, ...any) {
 			return
 		}
 		defer fh.Close()
-		fmt.Fprintf(fh, "%s %s\n", time.Now().Format("15:04:05"), fmt.Sprintf(f, a...))
+		line := time.Now().Format("15:04:05") + " " + fmt.Sprintf(f, a...)
+		fmt.Fprintln(fh, line)
+		m.events.publish(slug, event{kind: "log", data: line})
 	}
 }
 
@@ -128,6 +131,7 @@ func (m *Manager) update(slug string, f func(a *App)) {
 		}
 		return nil
 	})
+	m.notify(slug)
 }
 
 // setStatus sætter status og den forklarende tekst, der vises i dashboardet og til AI'en.
@@ -266,6 +270,7 @@ func (m *Manager) deployWith(name string, port int, note, ownerID, how, from str
 		_ = os.RemoveAll(dir)
 		return nil, err
 	}
+	m.notify(slug)
 	m.logger(slug)("Version %d modtaget fra AI (%s)", n, how)
 	for _, w := range warnings {
 		m.logger(slug)("Advarsel: %s", w)
@@ -328,6 +333,7 @@ func (m *Manager) Reject(slug string) error {
 	if !ok || a.Status != StatusWaiting {
 		return errors.New("appen venter ikke på godkendelse")
 	}
+	defer m.notify(slug)
 	return m.st.Do(func(db *DB) error {
 		delete(db.Apps, slug)
 		return nil
@@ -588,6 +594,7 @@ func (m *Manager) Delete(slug string) error {
 	_ = os.Remove(m.logPath(slug))
 	_ = os.Remove(m.logPath(slug) + ".1")
 	m.RemoveKey(slug)
+	defer m.notify(slug) // åbne sider får at vide, at appen er væk
 	return m.st.Do(func(db *DB) error { delete(db.Apps, slug); return nil })
 }
 

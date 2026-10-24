@@ -40,6 +40,13 @@ På en rigtig server med wildcard-DNS (`*.dit-domæne.dk`) bruger du `-domain di
 
 ## Udgivelse, data og oprydning
 
+**Appens side følger med live.** Mens en app bygger eller starter, opdateres status og tekst øverst, og nye
+loglinjer kommer frem under Log, uden at siden genindlæses (Server-Sent Events, kun standardbiblioteket). Når
+appen er færdig, genindlæses siden én gang. Har du skrevet noget i en formular imens, sker det ikke af sig
+selv; i stedet kommer en knap «Opdatér siden», så intet går tabt. Uden JavaScript genindlæses siden hvert 3.
+sekund som før. Forsiden følger også med: skifter en app status, skiftes indholdet ud i baggrunden, uden at
+siden genindlæses.
+
 **Fire måder at sende en app på:**
 - `deploy_app`: filerne som tekst i selve værktøjskaldet. Til små apps, fx lavet i claude.ai. Højst 300 filer og 8 MB, kun tekst.
 - `prepare_upload`: giver en engangsadresse (15 minutter) og en kommando, der pakker mappen og sender den med `curl`.

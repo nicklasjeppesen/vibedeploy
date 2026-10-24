@@ -44,6 +44,10 @@ type Server struct {
 	limitOnce sync.Once
 	limit     *loginLimiter // forkerte loginforsøg pr. IP og konto (ratelimit.go)
 
+	closeOnce sync.Once // closing() i events.go: lukkes, når serveren lukker ned
+	shutOnce  sync.Once
+	closeCh   chan struct{}
+
 	codeMu    sync.Mutex
 	setupCode string // kræves til første konto, når serveren ikke kører på localhost
 }
@@ -138,6 +142,7 @@ func main() {
 	go s.upd.Run()
 
 	srv := &http.Server{Addr: *addr, Handler: s.handler(), ReadHeaderTimeout: 10 * time.Second}
+	srv.RegisterOnShutdown(s.beginShutdown) // afslut live-strømme med det samme, så nedlukningen ikke venter på dem
 	go func() {
 		// Ctrl+C lokalt, SIGTERM fra systemd (fx under en opdatering): færdiggør igangværende forespørgsler.
 		// Appenes containere kører videre; næste start overtager dem (Reconcile).

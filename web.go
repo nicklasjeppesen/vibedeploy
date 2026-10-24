@@ -160,6 +160,8 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /apps/new/git", s.requireUser(s.gitNewPage))
 	mux.HandleFunc("POST /apps/new/git", s.requireUser(s.gitNewSubmit))
 	mux.HandleFunc("GET /apps/{slug}", s.requireUser(s.appPage))
+	mux.HandleFunc("GET /apps/{slug}/events", s.requireUser(s.appEvents))
+	mux.HandleFunc("GET /events", s.requireUser(s.homeEvents))
 	mux.HandleFunc("POST /apps/{slug}/{action}", s.requireUser(s.appAction))
 	mux.HandleFunc("GET /authorize", s.requireUser(s.authorizePage))
 	mux.HandleFunc("POST /authorize", s.requireUser(s.authorizeSubmit))
@@ -539,7 +541,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, u *User) {
 		alert = s.serverAlert()
 	}
 	s.page(w, r, "home.html", "Dine apps", map[string]any{
-		"Apps": views, "Summary": strings.Join(parts, ". "), "Connected": connected, "Refresh": busy > 0, "CanBuild": canBuild(u),
+		"Apps": views, "Summary": strings.Join(parts, ". "), "Connected": connected, "Busy": busy > 0, "CanBuild": canBuild(u),
 		"Alert": alert,
 	})
 }
@@ -643,7 +645,8 @@ func (s *Server) appPage(w http.ResponseWriter, r *http.Request, u *User) {
 		x := a.Versions[i]
 		vers = append(vers, ver{x, relTime(x.Created), x.N == a.Current, x.Image != "" && x.N != a.Current})
 	}
-	data := map[string]any{"A": v, "Tab": tab, "Versions": vers, "Refresh": a.Status == StatusBuilding || a.Status == StatusStarting,
+	// Siden følger med live via /apps/<slug>/events (events.go, app.js); Busy giver kun <noscript>-genindlæsning.
+	data := map[string]any{"A": v, "Tab": tab, "Versions": vers, "Busy": a.Status == StatusBuilding || a.Status == StatusStarting,
 		"Prompt": fmt.Sprintf("Min app «%s» har et problem. Hent loggen med get_logs, find fejlen og udgiv en rettelse.", a.Name),
 		"Usage":  s.appUsage(a.Slug)}
 	if tab == "log" {

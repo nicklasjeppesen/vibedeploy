@@ -1,13 +1,19 @@
 {{define "content"}}
 {{$a := .Data.A}}
+<div data-live="/apps/{{$a.Slug}}/events" data-status="{{$a.Status}}" data-current="{{$a.Current}}" data-tab="{{.Data.Tab}}" hidden></div>
+{{if .Data.Busy}}<noscript><meta http-equiv="refresh" content="3"></noscript>{{end}}
 <p><a href="/">← Alle apps</a></p>
 <div class="head">
   <div>
-    <h1>{{$a.Name}} <span class="status {{$a.Class}}"><i></i>{{$a.Label}}</span></h1>
+    <h1>{{$a.Name}} <span class="status {{$a.Class}}" id="live-status"><i></i><span id="live-label">{{$a.Label}}</span></span></h1>
     <p class="muted">{{$a.URL}}</p>
   </div>
   {{if eq $a.Status "live"}}<a class="btn" href="{{$a.URL}}" target="_blank" rel="noopener">Åbn appen</a>{{end}}
 </div>
+
+<div class="note idle block" id="live-busy" {{if not .Data.Busy}}hidden{{end}} aria-live="polite"><span id="live-text">{{$a.StatusText}}</span></div>
+<div class="note ok block" id="live-done" hidden aria-live="polite"><span id="live-done-text"></span>
+  <button class="btn light" type="button" id="live-reload">Opdatér siden</button></div>
 
 {{if eq $a.Status "waiting"}}
 <div class="note warn block">
@@ -112,7 +118,7 @@
 <section class="card">
   <h2>Log</h2>
   {{if $a.StatusText}}<p class="muted">{{$a.StatusText}}</p>{{end}}
-  <pre class="log">{{if .Data.Log}}{{.Data.Log}}{{else}}(ingen log endnu){{end}}</pre>
+  <pre class="log" id="live-log">{{if .Data.Log}}{{.Data.Log}}{{else}}(ingen log endnu){{end}}</pre>
 </section>
 {{end}}
 
