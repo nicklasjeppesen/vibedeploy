@@ -702,7 +702,8 @@ func (m *Manager) RequestSecrets(slug string, keys []string) error {
 // Reconcile bringer apps i orden, når Vibe Deploy starter. Kører en apps container stadig (Docker holder
 // den i gang, fx mens Vibe Deploy opdateres eller genstartes), overtages den, som den er, uden genstart;
 // kun den ubrugte plads ryddes op. Ellers startes appens nuværende version igen. Hver app tjekkes for sig,
-// så en app, der ikke svarer, ikke forsinker de andre.
+// så en app, der ikke svarer, ikke forsinker de andre. Reconcile kører, mens serveren allerede tager imod
+// forespørgsler; ændrer noget appen imens (fx en ny udgivelse), lader Reconcile den være (setIfUnchanged).
 func (m *Manager) Reconcile() {
 	db := m.st.Snapshot()
 	var wg sync.WaitGroup
@@ -715,7 +716,7 @@ func (m *Manager) Reconcile() {
 				m.reconcileApp(slug, a)
 			}(slug, *a)
 		case a.Status == StatusBuilding || a.Status == StatusStarting:
-			m.setStatus(slug, StatusFailed, "Serveren blev lukket, mens appen blev bygget. Bed Claude udgive den igen.")
+			m.setIfUnchanged(slug, *a, StatusFailed, "Serveren blev lukket, mens appen blev bygget. Bed Claude udgive den igen.")
 		}
 	}
 	wg.Wait()
@@ -729,7 +730,9 @@ func (m *Manager) reconcileApp(slug string, a App) {
 		if a.Status != StatusLive {
 			text = fmt.Sprintf("Serveren blev genstartet, mens en ny version blev bygget; version %d kører stadig. Bed Claude udgive igen.", a.Current)
 		}
-		m.setStatus(slug, StatusLive, text)
+		if !m.setIfUnchanged(slug, a, StatusLive, text) {
+			return // en ny udgivelse er gået i gang imens; den tager over
+		}
 		logf("Vibe Deploy startede; version %d kørte allerede og fortsætter uden genstart", a.Current)
 		go func() { // en container fra en afbrudt udrulning på den anden plads
 			sl := m.slotLock(slug)
@@ -741,6 +744,20 @@ func (m *Manager) reconcileApp(slug string, a App) {
 		}()
 		return
 	}
-	m.setStatus(slug, StatusStarting, "Starter din app …")
+	if !m.setIfUnchanged(slug, a, StatusStarting, "Starter din app …") {
+		return
+	}
 	_ = m.switchTo(slug, a.Current)
+}
+
+// setIfUnchanged sætter status, men kun hvis appen stadig har samme status, version og plads som i was.
+// Reconcile bruger den, fordi en udgivelse kan nå at gå i gang, mens Reconcile tjekker appen.
+func (m *Manager) setIfUnchanged(slug string, was App, status, text string) bool {
+	ok := false
+	m.update(slug, func(a *App) {
+		if a.Status == was.Status && a.Current == was.Current && a.Pending == was.Pending && a.Slot == was.Slot {
+			a.Status, a.StatusText, ok = status, text, true
+		}
+	})
+	return ok
 }

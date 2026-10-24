@@ -68,7 +68,7 @@ Vibe Deploy er ét Go-program (standardbiblioteket plus `modernc.org/sqlite`), d
 2. Læser nøglen til hemmeligheder (`keyPath`), åbner `data/state.db` med `OpenStore` (flytter en gammel `state.json` over) og migrerer gamle data (første bruger bliver ejer, apps uden synlighed bliver private). Er data skrevet med et nyere skema (`Settings.Schema` > `schemaVersion`), nægter den at starte.
 3. Vælger runtime: `docker` (tjekker, at Docker kører) eller `demo`.
 4. Er der ingen konti, og kører serveren ikke på `localhost`, udskrives en **opsætningskode**, som skal bruges til den første konto.
-5. `Manager.Reconcile` overtager apps, hvis container stadig svarer (uden genstart), starter resten igen og markerer afbrudte bygninger som fejlede.
+5. `Manager.Reconcile` kører i baggrunden, mens porten allerede er åben: den overtager apps, hvis container stadig svarer (uden genstart), starter resten igen og markerer afbrudte bygninger som fejlede. Den ændrer kun en app, der ikke har ændret sig imens (`setIfUnchanged`), så en udgivelse, der når at gå i gang, ikke overskrives.
 6. `DailyBackups`, `Monitor` og `Updater` startes i baggrunden, og HTTP-serveren begynder at lytte. SIGTERM og Ctrl+C lukker pænt ned (højst 10 sekunder); appenes containere kører videre.
 
 ## Tilstand og lagring (`store.go`)

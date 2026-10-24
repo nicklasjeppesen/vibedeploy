@@ -243,3 +243,25 @@ func TestInstNames(t *testing.T) {
 		t.Fatalf("begge pladser burde lægges sammen under app blog: %+v", got)
 	}
 }
+
+// TestReconcileLeavesNewDeploysAlone: Reconcile kører, mens serveren tager imod forespørgsler. Går en ny
+// udgivelse i gang, mens Reconcile tjekker en app, må Reconcile ikke overskrive dens status.
+func TestReconcileLeavesNewDeploysAlone(t *testing.T) {
+	m := newTestManager(t)
+	_ = m.st.Do(func(db *DB) error {
+		db.Apps["blog"] = &App{Slug: "blog", Name: "Blog", Status: StatusLive, Current: 1, Approved: true}
+		return nil
+	})
+	was, _ := m.get("blog")
+	m.setStatus("blog", StatusBuilding, "Pakker din app …") // en ny udgivelse når at gå i gang
+	if m.setIfUnchanged("blog", was, StatusLive, "") {
+		t.Fatal("Reconcile må ikke overskrive en app, der har ændret sig")
+	}
+	if a, _ := m.get("blog"); a.Status != StatusBuilding {
+		t.Fatalf("status skal være den nye udgivelses, fik %s", a.Status)
+	}
+	was, _ = m.get("blog")
+	if !m.setIfUnchanged("blog", was, StatusLive, "") {
+		t.Fatal("uden ændringer skal status sættes")
+	}
+}

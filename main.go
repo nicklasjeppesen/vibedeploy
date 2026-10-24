@@ -130,7 +130,9 @@ func main() {
 			fmt.Printf("\nOpsætningskode (kræves, når den første konto oprettes): %s\n", s.setupCode)
 		}
 	}
-	s.mgr.Reconcile()
+	// Reconcile kører i baggrunden, så porten åbner med det samme. Kørende containere har stadig den port, der
+	// står i databasen, så proxyen kan sende trafik til dem, før Reconcile har tjekket dem.
+	go s.mgr.Reconcile()
 	go s.mgr.DailyBackups()
 	go s.mon.Run()
 	go s.upd.Run()
