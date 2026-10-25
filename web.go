@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -161,6 +163,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("POST /apps/new/git", s.requireUser(s.gitNewSubmit))
 	mux.HandleFunc("GET /apps/{slug}", s.requireUser(s.appPage))
 	mux.HandleFunc("GET /apps/{slug}/events", s.requireUser(s.appEvents))
+	mux.HandleFunc("GET /apps/{slug}/backups/{name}", s.requireUser(s.backupDownload))
 	mux.HandleFunc("GET /events", s.requireUser(s.homeEvents))
 	mux.HandleFunc("POST /apps/{slug}/{action}", s.requireUser(s.appAction))
 	mux.HandleFunc("GET /authorize", s.requireUser(s.authorizePage))
@@ -723,6 +726,61 @@ func gitState(a App) map[string]any {
 	st["NewOnGit"] = g.Latest != "" && g.Latest != cur && a.Current > 0
 	return st
 }
+
+// backupDownload sender en af appens backups som fil, så ejeren kan gemme den uden for serveren.
+// Kun den, der kan styre appen, kan hente den, og navnet skal ligne en backup, så stien ikke kan pege andre steder hen.
+func (s *Server) backupDownload(w http.ResponseWriter, r *http.Request, u *User) {
+	slug, name := r.PathValue("slug"), r.PathValue("name")
+	refuse := func(code int, title, text, back string) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(code)
+		s.page(w, r, "message.html", title, map[string]any{"Text": text, "Back": back})
+	}
+	a, ok := s.mgr.get(slug)
+	if !ok || !canManage(&a, u) {
+		refuse(http.StatusForbidden, "Ingen adgang", "Du kan ikke hente data fra den app.", "/")
+		return
+	}
+	var f *os.File
+	err := errors.New("ukendt backup")
+	if backupRe.MatchString(name) {
+		f, err = os.Open(filepath.Join(s.mgr.backupDir(slug), name))
+	}
+	if err != nil {
+		refuse(http.StatusNotFound, "Findes ikke", "Den backup findes ikke (mere). Måske er den ryddet op, fordi der er kommet nyere.", "/apps/"+slug+"?tab=data")
+		return
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		http.Error(w, "Backuppen kunne ikke læses.", http.StatusInternalServerError)
+		return
+	}
+	s.mgr.logger(slug)("Backup hentet af %s: %s", u.Name, name)
+	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+slug+"-"+name+`"`)
+	w.Header().Set("Cache-Control", "no-store")
+	http.ServeContent(w, r, name, info.ModTime(), stopReader{f, s.closing()})
+}
+
+// stopReader stopper en download, når serveren lukker ned, så en opdatering ikke venter på en langsom forbindelse.
+type stopReader struct {
+	f    *os.File
+	stop <-chan struct{}
+}
+
+// Read læser videre fra filen, indtil serveren lukker ned.
+func (r stopReader) Read(p []byte) (int, error) {
+	select {
+	case <-r.stop:
+		return 0, errors.New("serveren lukker ned")
+	default:
+		return r.f.Read(p)
+	}
+}
+
+// Seek bruges af http.ServeContent til at finde størrelsen og til at hente en del af filen.
+func (r stopReader) Seek(off int64, whence int) (int64, error) { return r.f.Seek(off, whence) }
 
 // appAction håndterer knapperne på appens side (godkend, afvis, genstart, stop, rollback,
 // variabler, hemmeligheder, backup/gendan, git, deling og slet) og sender tilbage til den relevante fane.

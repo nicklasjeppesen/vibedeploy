@@ -79,7 +79,8 @@ siden genindlæses.
 **Data, der overlever:** Hver app får en mappe monteret på `/data` (stien står også i `DATA_DIR`).
 Den overlever genstarter, nye versioner og rollback. Alt andet i containeren starter forfra.
 Der tages backup af `/data` én gang i døgnet og før hver ny version; de seneste 10 gemmes.
-Under fanen **Data** kan ejeren tage en backup og gendanne en tidligere. Ved gendannelse gemmes den nuværende data først.
+SQLite-databaser i `/data` kopieres for sig, så backuppen har en hel database, også når appen skriver i den.
+Under fanen **Data** kan ejeren tage en backup, hente en backup som fil (.tar.gz) og gendanne en tidligere. Ved gendannelse gemmes den nuværende data først.
 
 **Udrulning uden nedetid:** En ny version (og en genstart eller rollback) startes ved siden af den gamle, i sin
 egen container på en ny port. Først når den svarer på `/health`, flyttes trafikken over i ét skridt, og den gamle
@@ -215,7 +216,7 @@ Fejler en ny version, kører den forrige videre.
 - Tilbagerulning ved en opdatering, der ikke svarer, er kun afprøvet med tests og en falsk `systemctl`, ikke på en rigtig server.
 - Opdateringen af Vibe Deploy har kun én kanal (nyeste release). Der er ingen beta-kanal og ingen mulighed for at
   springe en bestemt version over, ud over at en version, der er rullet tilbage, ikke prøves igen automatisk.
-- Backup tages, mens appen kører. En app, der skriver i en database lige i det øjeblik, kan give en backup, der ikke er helt konsistent. Brug SQLite med WAL, eller stop appen før en manuel backup.
+- Backup tages, mens appen kører. SQLite-databaser kopieres sikkert (bedst med WAL). Ændres en database hele tiden i flere sekunder, eller bruger appen en anden slags database, tages filerne med, som de er, og det står i appens log. Kun afprøvet med tests, ikke med Docker på en rigtig server.
 - `/data`-mappen har skriveadgang for alle (0777), fordi containere ofte kører som en anden bruger end serveren. Forældremappen er lukket (0700), så andre brugere på maskinen kan ikke komme ind.
 - Én container og én port pr. app: ingen separat database eller flere tjenester (docker-compose).
 - Under udrulning uden nedetid kører den forrige version kort samtidig med den nye. En app, der ændrer sin database

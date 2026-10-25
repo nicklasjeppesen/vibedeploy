@@ -257,6 +257,14 @@ Alt, der rører containere, går gennem interfacet `Runtime` (`Build`, `Pull`, `
   forsvinder ved genstart og ny version.
 - `Backup` pakker mappen til `backups/<slug>/ÅÅÅÅMMDD-TTMMSS.tar.gz`: én gang i døgnet (`DailyBackups`),
   før hver ny version og når ejeren beder om det. De 10 nyeste beholdes.
+- `DailyBackups` tjekker hver time, om der er gået et døgn siden den nyeste `backups/_server/state-*.db`
+  (`dailyDue`). Så nulstiller en genstart ikke tælleren.
+- SQLite-filer (genkendt på de første 16 bytes) åbnes ikke direkte, for SQLite kunne lave `-shm`-filer, som appen
+  ikke kan skrive i. `snapshotSQLite` kopierer databasen med `-wal`/`-journal` og bruger kun kopien, hvis
+  databasefilen ikke ændrede sig imens. Den samles så til én fil med `VACUUM INTO`, og `-wal`/`-shm` springes over.
+  Lykkes det ikke, tages filerne med, som de er.
+- `GET /apps/<slug>/backups/<navn>` (`backupDownload` i `web.go`) sender en backup som fil. Kun den, der kan styre
+  appen (`canManage`), og kun navne, der passer til `backupRe`. Downloaden stopper ved nedlukning (`stopReader`).
 - `Restore` stopper appen, tager en backup af den nuværende data, pakker den valgte backup ud og
   starter appen igen. Fejler udpakningen, lægges den gamle data tilbage.
 

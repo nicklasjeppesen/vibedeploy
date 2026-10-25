@@ -3,6 +3,7 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -155,6 +156,15 @@ func (m *Manager) Backup(slug, reason string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// SQLite-databaser kopieres for sig (snapshotSQLite), så en database, appen skriver i, ikke bliver halv.
+	snapDir, err := os.MkdirTemp(m.backupDir(slug), ".sqlite-")
+	if err != nil {
+		f.Close()
+		os.Remove(dst + ".tmp")
+		return "", err
+	}
+	defer os.RemoveAll(snapDir)
+	snapped := map[string]bool{} // databaser, der er kopieret sikkert; deres -wal og -journal skal ikke med
 	gz := gzip.NewWriter(f)
 	tw := tar.NewWriter(gz)
 	err = filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
@@ -172,23 +182,41 @@ func (m *Manager) Backup(slug, reason string) (string, error) {
 		if !info.Mode().IsRegular() && !info.IsDir() {
 			return nil
 		}
+		if db, ok := sqliteSidecarOf(p); ok && snapped[db] {
+			return nil // indholdet er allerede med i kopien af databasen
+		}
+		body := p
+		size := info.Size()
+		if info.Mode().IsRegular() && isSQLite(p) {
+			snap, err := snapshotSQLite(p, snapDir)
+			if err == nil {
+				if si, err2 := os.Stat(snap); err2 == nil {
+					body, size, snapped[p] = snap, si.Size(), true
+				}
+			} else {
+				m.logger(slug)("Databasen %s kunne ikke kopieres sikkert og er taget med, som den er: %v", rel, err)
+			}
+		}
 		h, err := tar.FileInfoHeader(info, "")
 		if err != nil {
 			return err
 		}
 		h.Name = filepath.ToSlash(rel)
+		h.Size = size
 		if info.IsDir() {
 			h.Name += "/"
+			h.Size = 0
 		}
 		if err := tw.WriteHeader(h); err != nil {
 			return err
 		}
 		if info.Mode().IsRegular() {
-			in, err := os.Open(p)
+			in, err := os.Open(body)
 			if err != nil {
 				return err
 			}
-			_, err = io.Copy(tw, in)
+			// Kun den størrelse, der står i hovedet: en fil, der vokser imens (fx en logfil), må ikke stoppe backuppen.
+			_, err = io.CopyN(tw, in, size)
 			in.Close()
 			return err
 		}
@@ -304,17 +332,150 @@ func (m *Manager) Restore(slug, name string) error {
 }
 
 // DailyBackups tager backup af serverens database og af alle apps med data én gang i døgnet.
+// Den tjekker hver time, om det er tid (dailyDue). Så tæller en genstart, fx en opdatering af Vibe Deploy,
+// ikke forfra, og en server, der har været slukket, tager en backup kort efter opstart.
 func (m *Manager) DailyBackups() {
-	for range time.Tick(24 * time.Hour) {
-		if err := m.BackupState(); err != nil {
-			fmt.Println("Backup af state.db fejlede:", err)
+	time.Sleep(time.Minute) // lad opstarten blive færdig først
+	var lastRun time.Time
+	for {
+		if now := time.Now(); m.dailyDue(now, lastRun) {
+			lastRun = now
+			m.runDailyBackups()
 		}
-		for slug := range m.st.Snapshot().Apps {
-			if _, err := m.Backup(slug, "dagligt"); err != nil {
-				m.logger(slug)("Daglig backup fejlede: %v", err)
-			}
+		time.Sleep(time.Hour)
+	}
+}
+
+// dailyDue er sand, når der er gået et døgn siden den seneste daglige backup. Tidspunktet læses af navnet på den
+// nyeste kopi af state.db, så det overlever genstarter. lastRun er det seneste forsøg i denne proces: fejler kopien
+// af state.db, prøves der ikke igen hver time, for så ville de hyppige backups skubbe de ældre ud (keepBackups).
+func (m *Manager) dailyDue(now, lastRun time.Time) bool {
+	last := lastRun
+	old, _ := filepath.Glob(filepath.Join(m.dataDir, "backups", "_server", "state-*.db"))
+	sort.Strings(old)
+	if len(old) > 0 {
+		name := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(old[len(old)-1]), "state-"), ".db")
+		if t, err := time.ParseInLocation("20060102-150405", name, time.Local); err == nil && t.After(last) {
+			last = t
 		}
 	}
+	return now.Sub(last) >= 24*time.Hour
+}
+
+// runDailyBackups tager den daglige backup af state.db og af hver app.
+func (m *Manager) runDailyBackups() {
+	if err := m.BackupState(); err != nil {
+		fmt.Println("Backup af state.db fejlede:", err)
+	}
+	for slug := range m.st.Snapshot().Apps {
+		if _, err := m.Backup(slug, "dagligt"); err != nil {
+			m.logger(slug)("Daglig backup fejlede: %v", err)
+		}
+	}
+}
+
+// isSQLite er sand, hvis filen begynder som en SQLite-database.
+func isSQLite(p string) bool {
+	f, err := os.Open(p)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	head := make([]byte, 16)
+	_, err = io.ReadFull(f, head)
+	return err == nil && string(head) == "SQLite format 3\x00"
+}
+
+// sqliteSidecarOf giver databasen, som en -wal-, -shm- eller -journal-fil hører til.
+func sqliteSidecarOf(p string) (string, bool) {
+	for _, ext := range []string{"-wal", "-shm", "-journal"} {
+		if strings.HasSuffix(p, ext) {
+			return strings.TrimSuffix(p, ext), true
+		}
+	}
+	return "", false
+}
+
+// snapshotSQLite laver en sammenhængende kopi af en SQLite-database, mens appen måske skriver i den, og giver
+// stien til kopien i dir. Appens filer åbnes ikke med SQLite: det kunne efterlade -shm-filer, som ejes af
+// Vibe Deploy, og som appen så ikke kan skrive i. I stedet kopieres databasen og dens -wal og -journal, og
+// kopien bruges kun, hvis selve databasefilen ikke ændrede sig imens. Med WAL skrives databasefilen kun ved et
+// checkpoint, og halvt skrevne transaktioner sidst i -wal springer SQLite selv over. Til sidst pakkes kopien
+// til én fil med VACUUM INTO, så backuppen kun indeholder en hel database.
+func snapshotSQLite(src, dir string) (string, error) {
+	tmp, err := os.MkdirTemp(dir, "db-")
+	if err != nil {
+		return "", err
+	}
+	cp := filepath.Join(tmp, "db")
+	for try := 0; try < 10; try++ {
+		if try > 0 {
+			time.Sleep(300 * time.Millisecond)
+		}
+		before, err := os.Stat(src)
+		if err != nil {
+			return "", err
+		}
+		// Filsystemets tidsstempler er grove (nogle millisekunder): er filen lige ændret, ventes der lidt,
+		// så en ny ændring med sikkerhed giver et nyt tidsstempel.
+		if time.Since(before.ModTime()) < 100*time.Millisecond {
+			continue
+		}
+		if err := copyFile(src, cp); err != nil {
+			return "", err
+		}
+		for _, ext := range []string{"-wal", "-journal"} {
+			_ = os.Remove(cp + ext)
+			if err := copyFile(src+ext, cp+ext); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return "", err
+			}
+		}
+		after, err := os.Stat(src)
+		if err != nil {
+			return "", err
+		}
+		if after.Size() == before.Size() && after.ModTime().Equal(before.ModTime()) {
+			out := filepath.Join(tmp, "out")
+			return out, vacuumInto(cp, out)
+		}
+	}
+	return "", errors.New("databasen blev ændret hele tiden under kopieringen")
+}
+
+// vacuumInto kontrollerer databasen i src og skriver den som én samlet fil til dst.
+func vacuumInto(src, dst string) error {
+	db, err := sql.Open("sqlite", "file:"+src+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	var check string
+	if err := db.QueryRow(`PRAGMA quick_check`).Scan(&check); err != nil {
+		return err
+	}
+	if check != "ok" {
+		return fmt.Errorf("kopien af databasen er beskadiget: %s", check)
+	}
+	_, err = db.Exec(`VACUUM INTO ?`, dst)
+	return err
+}
+
+// copyFile kopierer en almindelig fil til dst (dst overskrives).
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 // BackupState gemmer en kopi af state.db i backups/_server (de 7 nyeste beholdes).

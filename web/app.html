@@ -105,12 +105,14 @@
   <ul class="versions">
   {{range .Data.Backups}}
     <li><div><b>{{.Ago}}</b><br><span class="muted small">{{.Time.Format "02-01-2006 15:04"}} · {{.Size}}</span></div>
-      <form method="post" action="/apps/{{$a.Slug}}/restore"><input type="hidden" name="name" value="{{.Name}}"><button class="btn ghost">Gendan</button></form></li>
+      <div class="row"><a class="btn ghost" href="/apps/{{$a.Slug}}/backups/{{.Name}}" download>Hent</a>
+      <form method="post" action="/apps/{{$a.Slug}}/restore"><input type="hidden" name="name" value="{{.Name}}"><button class="btn ghost">Gendan</button></form></div></li>
   {{else}}
     <li><span class="muted">Ingen backups endnu.</span></li>
   {{end}}
   </ul>
-  <p class="pad muted small">Gendanner du, gemmes den nuværende data først som en ny backup, så du kan fortryde.</p>
+  <p class="pad muted small">Gendanner du, gemmes den nuværende data først som en ny backup, så du kan fortryde.
+    Med «Hent» får du backuppen som en fil (.tar.gz), du kan gemme på din egen computer.</p>
 </section>
 {{end}}
 
