@@ -20,7 +20,7 @@ gofmt -l .                    # skal være tom
 
 - Demo-runtime'n (`demoRT` i `runtime.go`) er en lille HTTP-server i samme proces. Den bruges i testene og er den
   hurtigste måde at prøve et flow på. Docker-delen er ikke dækket af tests: sig det, hvis du ændrer den.
-- `go.mod` kræver Go 1.26. Den eneste afhængighed er `modernc.org/sqlite` (ren Go, så der krydskompileres uden cgo).
+- `go.mod` kræver Go 1.27. Den eneste afhængighed er `modernc.org/sqlite` (ren Go, så der krydskompileres uden cgo).
 
 ## Faste valg (bryd dem ikke uden at spørge)
 
