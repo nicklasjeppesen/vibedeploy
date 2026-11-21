@@ -39,6 +39,8 @@ Vibe Deploy er ét Go-program (standardbiblioteket plus `modernc.org/sqlite`), d
 | `buildguide.go` | Byggevejledningen til AI'en (`get_build_guide`) og tjek af Dockerfile |
 | `metrics.go`, `metrics_*.go` | `Monitor`: måler CPU, hukommelse, disk og hver apps forbrug (Linux via /proc, macOS via sysctl) |
 | `serverpage.go` | Siden «Server» med nøgletal, SVG-grafer og forbrug pr. app |
+| `stats.go` | `Stats`: besøgstal (talt i `proxyApp`) og overvågning (tjek af `/health` hvert minut) pr. app, `data/stats.json`, søjlediagrammer |
+| `cleanup.go` | «Ryd op i cache» på siden Server: byggecache, gamle `vd-`images og lag uden navn (kun Docker) |
 | `install.go` | `vibedeploy install`: bruger, nøgle, opsætningskode, systemd, opdateringsenheder og Caddyfile (skabeloner fra `deploy/`, indlejret) |
 | `update.go` | Opdatering af Vibe Deploy selv: `Updater` (tjek, knap, nat) og `vibedeploy update` (root-delen, tilbagerulning), `/healthz` |
 | `release.go`, `releasekey.go` | Signerede releases: `release.json` + ed25519-signatur, `keygen`, `sign`, verifikation og hentning |
@@ -70,7 +72,7 @@ Vibe Deploy er ét Go-program (standardbiblioteket plus `modernc.org/sqlite`), d
 3. Vælger runtime: `docker` (tjekker, at Docker kører) eller `demo`.
 4. Er der ingen konti, og kører serveren ikke på `localhost`, udskrives en **opsætningskode**, som skal bruges til den første konto.
 5. `Manager.Reconcile` kører i baggrunden, mens porten allerede er åben: den overtager apps, hvis container stadig svarer (uden genstart), starter resten igen og markerer afbrudte bygninger som fejlede. Den ændrer kun en app, der ikke har ændret sig imens (`setIfUnchanged`), så en udgivelse, der når at gå i gang, ikke overskrives.
-6. `DailyBackups`, `Monitor` og `Updater` startes i baggrunden, og HTTP-serveren begynder at lytte. SIGTERM og Ctrl+C lukker pænt ned (højst 10 sekunder); appenes containere kører videre.
+6. `DailyBackups`, `Monitor`, `Updater` og `Stats` startes i baggrunden, og HTTP-serveren begynder at lytte. SIGTERM og Ctrl+C lukker pænt ned (højst 10 sekunder); appenes containere kører videre.
 
 ## Tilstand og lagring (`store.go`)
 
@@ -357,6 +359,32 @@ Updater.Run: hvert minut tick; hver time fetchRelease ──▶ «Ny version» p
   forsøget, og opdateringen bedes om. Siden viser næste mulige tidspunkt (`schedule.next`).
 - **Under genstarten:** app-containerne kører videre, `Reconcile` overtager dem, og Caddy holder forespørgsler i op til
   15 sekunder (`lb_try_duration`) i stedet for at svare 502.
+
+## Besøg og overvågning (`stats.go`)
+
+- `proxyApp` pakker ResponseWriter ind i `statusRecorder` (husker statuskode og om svaret var HTML) og kalder
+  `Stats.Hit` i en `defer`, når forespørgslen er færdig. `statusRecorder.Unwrap` gør, at `http.ResponseController`
+  stadig kan bruge Flush (streaming) og Hijack (WebSocket). Login-omdirigeringer og afviste IP-adresser tælles ikke;
+  den ventende side (503), når appen ikke kører, tælles som en fejl.
+- En sidevisning er en GET med svar 200–399, HTML og `Sec-Fetch-Dest` tom eller `document`, ikke forhåndshentning og
+  ikke en robot (`botRe`). Besøgende: `visitorHash` (SHA-256 af dagens salt, IP og User-Agent, 8 bytes) i et sæt pr.
+  app pr. dag (højst `maxSeen`). Saltet og sættet skiftes ved midnat i ejerens tidszone (`Settings.UpdateTZ`).
+- `Stats.Run` tjekker hvert minut alle apps, hvor `serving` er sand (`probe`: `GET /health` på `HostPort`, svar under
+  500 = svarer). `observe` regner appen for nede efter `downAfter` (2) fejl i træk, åbner et `Incident`, skriver i
+  appens log og kalder `m.notify`; første vellykkede tjek lukker det. Apps, der ikke kører, overvåges ikke (`unwatched`).
+- Alt samles i spande pr. time (48 timer) og pr. dag (90 dage) og skrives til `data/stats.json` med `writeFileAtomic`
+  hvert minut, hvis noget er ændret, og når serveren lukker ned. Apps, der ikke findes mere, glemmes ved gemning.
+  Filen er bevidst ikke i `state.db`, fordi den ændrer sig ved hvert besøg; ingen `schemaVersion` er nødvendig.
+- Alle metoder virker på en nil `*Stats`, så en `Server` uden Stats (de fleste tests) virker som før.
+
+## Ryd op i cache (`cleanup.go`)
+
+- Kun med `dockerRT`. `cacheInfo` viser byggecachen fra `docker system df` (målt af `Monitor`) og tæller gamle images.
+- `keepImages` er `Version.Image` for alle versioner, der ikke er `Pruned`, og alle slugs, der bygger eller starter.
+  `orphanImages` er `vd-*`-images uden for den liste, som ingen container bruger. Andre images røres aldrig.
+- `startCleanup` kører i baggrunden (én ad gangen): `docker builder prune -af`, `docker rmi` (uden `-f`) for hvert gammelt
+  image og `docker image prune -f`. Resultatet står i `Server.clean` og vises på siden; `Monitor.Remeasure` får næste
+  måling til at måle disken igen.
 
 ## Tests
 

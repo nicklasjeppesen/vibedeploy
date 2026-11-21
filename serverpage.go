@@ -23,6 +23,8 @@ type Tile struct {
 type UsageRow struct {
 	Name, Slug, Status, Class      string
 	CPU, Mem, Data, Backups, Files string
+	Views, Uptime                  string // sidevisninger de seneste 7 dage, oppetid det seneste døgn (stats.go)
+	Down                           bool
 	MemBytes                       uint64
 }
 
@@ -98,10 +100,16 @@ func (s *Server) serverPage(w http.ResponseWriter, r *http.Request, u *User) {
 	db := s.st.Snapshot()
 
 	var rows []UsageRow
+	sum := s.stats.Summary()
 	for slug, a := range db.Apps {
 		us := usage[slug]
+		st := sum[slug]
 		row := UsageRow{Name: a.Name, Slug: slug, Status: statusLabel(a.Status), Class: statusClass(a.Status),
-			Data: humanSize(us.Data), Backups: humanSize(us.Backups), Files: humanSize(us.Sources), CPU: "–", Mem: "–"}
+			Data: humanSize(us.Data), Backups: humanSize(us.Backups), Files: humanSize(us.Sources), CPU: "–", Mem: "–",
+			Views: numText(st.Week), Uptime: st.Uptime, Down: st.Down && serving(*a)}
+		if row.Uptime == "" {
+			row.Uptime = "–"
+		}
 		if us.Running {
 			row.CPU, row.MemBytes = pctText(us.CPU), us.MemUsed
 			row.Mem = bytesText(us.MemUsed)
@@ -149,6 +157,7 @@ func (s *Server) serverPage(w http.ResponseWriter, r *http.Request, u *User) {
 		"Docker":      s.rt.Name() == "docker",
 		"RefreshSecs": 30,
 		"Self":        s.upd.View(),
+		"Cache":       s.cacheInfo(df),
 	})
 }
 

@@ -214,6 +214,14 @@ func (m *Monitor) Snapshot() (HostStats, []Sample, map[string]AppUsage, DiskBrea
 	return m.now, append([]Sample(nil), m.samples...), apps, m.disk, append([]DockerDF(nil), m.dockerDF...)
 }
 
+// Remeasure får næste måling til også at måle disken og Docker igen (fx efter en oprydning), i stedet for
+// at vente op til 10 minutter.
+func (m *Monitor) Remeasure() {
+	m.mu.Lock()
+	m.diskAt = time.Time{}
+	m.mu.Unlock()
+}
+
 // App returnerer én apps forbrug.
 func (m *Monitor) App(slug string) (AppUsage, bool) {
 	m.mu.Lock()

@@ -105,3 +105,10 @@ h2.gap{margin-top:24px}
 @media (max-width:700px){.two,.kv,.kv.secret,.kv.schedule,.facts{grid-template-columns:1fr}.head{flex-direction:column;align-items:flex-start}main{padding:24px 16px}.top{height:auto;min-height:56px;flex-wrap:wrap;gap:4px 16px;padding:8px 16px}.top nav{flex-wrap:wrap;gap:4px 14px}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 details.gap{margin-top:20px}details summary{cursor:pointer;font-weight:600}
+.chart .hit rect.bar{fill:var(--accent);fill-opacity:.75}.chart .hit rect.bar.bad{fill:var(--bad);fill-opacity:.85}
+.chart .hit:hover rect.bar{fill-opacity:1}
+.charts.single{grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr))}
+.stats{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}.stats th,.stats td{padding:8px 6px;border-top:1px solid #EEF1F4;text-align:left}.stats .num{text-align:right}
+.stats thead th{color:var(--muted);font-size:13px;font-weight:700;border-top:0}
+.incidents li{padding:8px 0;border-top:1px solid #EEF1F4}
+.tabs{flex-wrap:wrap}

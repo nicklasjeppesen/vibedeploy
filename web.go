@@ -72,6 +72,8 @@ func flashText(code string) string {
 		"checked":      "Tjekket for en ny version.",
 		"autoon":       "Gemt. Nye versioner installeres automatisk på det valgte tidspunkt.",
 		"autooff":      "Automatisk opdatering er slået fra.",
+		"cleaning":     "Oprydningen er gået i gang. Den kan tage et par minutter; siden opdaterer sig selv. Dine apps kører videre imens.",
+		"cleanbusy":    "Der kører allerede en oprydning. Vent, til den er færdig.",
 	}[code]
 }
 
@@ -150,6 +152,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /people", s.requireAdmin(s.peoplePage))
 	mux.HandleFunc("GET /server", s.requireAdmin(s.serverPage))
 	mux.HandleFunc("POST /server/update", s.requireAdmin(s.serverUpdate))
+	mux.HandleFunc("POST /server/cleanup", s.requireAdmin(s.serverCleanup))
 	mux.HandleFunc("POST /people/invite", s.requireAdmin(s.peopleInvite))
 	mux.HandleFunc("POST /people/invite/{token}/revoke", s.requireAdmin(s.peopleRevokeInvite))
 	mux.HandleFunc("POST /people/user/{id}/reset", s.requireAdmin(s.peopleReset))
@@ -262,6 +265,9 @@ func (s *Server) proxyApp(w http.ResponseWriter, r *http.Request, slug string) {
 		return
 	}
 	stripCookie(r, appCookie)
+	rec := &statusRecorder{ResponseWriter: w}
+	defer func() { s.stats.Hit(slug, r, clientIP(r), rec.code(), rec.html) }() // også når proxyen afbryder (panic)
+	w = rec
 	if !serving(app) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Retry-After", "5")
@@ -272,6 +278,43 @@ func (s *Server) proxyApp(w http.ResponseWriter, r *http.Request, slug string) {
 		return
 	}
 	newAppProxy(app.HostPort).ServeHTTP(w, r)
+}
+
+// statusRecorder husker, hvilket svar appen gav, så besøget kan tælles (stats.go). Unwrap lader
+// http.ResponseController nå den rigtige ResponseWriter, så Flush (streaming) og Hijack (WebSocket) virker.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+	html   bool
+}
+
+// WriteHeader husker det første endelige svar. Foreløbige svar (1xx, fx 103 Early Hints) sendes bare videre;
+// 101 (skift til WebSocket) er endeligt.
+func (w *statusRecorder) WriteHeader(code int) {
+	if w.status == 0 && (code >= 200 || code == http.StatusSwitchingProtocols) {
+		w.status = code
+		w.html = strings.HasPrefix(w.Header().Get("Content-Type"), "text/html")
+	}
+	w.ResponseWriter.WriteHeader(code)
+}
+
+// Write sender svaret videre; uden WriteHeader først er svaret 200.
+func (w *statusRecorder) Write(b []byte) (int, error) {
+	if w.status == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(b)
+}
+
+// Unwrap giver den underliggende ResponseWriter (bruges af http.ResponseController).
+func (w *statusRecorder) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+// code er svarets statuskode; har proxyen ikke skrevet noget, regnes det som 200.
+func (w *statusRecorder) code() int {
+	if w.status == 0 {
+		return http.StatusOK
+	}
+	return w.status
 }
 
 // appTransport er den fælles forbindelsespulje til appernes containere. Standardtransporten
@@ -324,6 +367,8 @@ type AppView struct {
 	Missing                []string
 	VisLabel, Owner        string
 	Manage                 bool
+	TodayViews             int  // sidevisninger i dag (kun for apps, brugeren styrer)
+	Down                   bool // overvågningen får ikke svar fra appen
 }
 
 // view laver en AppView med adresse, statustekst og manglende hemmeligheder.
@@ -523,6 +568,16 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, u *User) {
 		}
 	}
 	sort.Slice(views, func(i, j int) bool { return views[i].Name < views[j].Name })
+	sum := s.stats.Summary()
+	var mine []AppView
+	for i := range views {
+		if st, ok := sum[views[i].Slug]; ok && views[i].Manage {
+			views[i].TodayViews, views[i].Down = st.Today, st.Down && serving(views[i].App)
+		}
+		if views[i].Manage {
+			mine = append(mine, views[i])
+		}
+	}
 	var parts []string
 	if live > 0 {
 		parts = append(parts, fmt.Sprintf("%d %s live", live, plural(live, "app er", "apps er")))
@@ -545,7 +600,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, u *User) {
 	}
 	s.page(w, r, "home.html", "Dine apps", map[string]any{
 		"Apps": views, "Summary": strings.Join(parts, ". "), "Connected": connected, "Busy": busy > 0, "CanBuild": canBuild(u),
-		"Alert": alert,
+		"Alert": alert, "Down": s.stats.downNames(mine),
 	})
 }
 
@@ -629,7 +684,7 @@ func (s *Server) appPage(w http.ResponseWriter, r *http.Request, u *User) {
 		return
 	}
 	tab := r.URL.Query().Get("tab")
-	if tab != "versioner" && tab != "log" && tab != "indstillinger" && tab != "data" {
+	if tab != "versioner" && tab != "log" && tab != "indstillinger" && tab != "data" && tab != "statistik" {
 		tab = "oversigt"
 	}
 	if !canManage(&a, u) {
@@ -651,7 +706,7 @@ func (s *Server) appPage(w http.ResponseWriter, r *http.Request, u *User) {
 	// Siden følger med live via /apps/<slug>/events (events.go, app.js); Busy giver kun <noscript>-genindlæsning.
 	data := map[string]any{"A": v, "Tab": tab, "Versions": vers, "Busy": a.Status == StatusBuilding || a.Status == StatusStarting,
 		"Prompt": fmt.Sprintf("Min app «%s» har et problem. Hent loggen med get_logs, find fejlen og udgiv en rettelse.", a.Name),
-		"Usage":  s.appUsage(a.Slug)}
+		"Usage":  s.appUsage(a.Slug), "Stats": s.stats.AppView(a)}
 	if tab == "log" {
 		data["Log"] = s.mgr.Logs(a.Slug, 200)
 	}

@@ -45,11 +45,34 @@ func TestAllPagesRender(t *testing.T) {
 				Zone, Label string
 				Selected    bool
 			}{{"Europe/Copenhagen", "Danmark (København) · UTC+1", true}, {"UTC", "UTC (verdenstid) · UTC", false}}}}
-	cases["server.html#dev"] = map[string]any{"Self": map[string]any{"Version": "dev"}}
+	cases["server.html"]["Cache"] = cacheView{Docker: true, BuildCache: "3.2GB", Reclaim: "3.2GB", Orphans: 2, OrphanSize: "240 MB",
+		Last: "for 2 min. siden", LastBy: "Anna", LastFreed: "1,1 GB", LastDone: []string{"Byggecachen er ryddet (1,1 GB)."}, LastErr: "x"}
+	cases["server.html#dev"] = map[string]any{"Self": map[string]any{"Version": "dev"}, "Cache": cacheView{Running: true}}
+	cases["home.html"]["Down"] = []string{"X"}
+
+	// Besøg og overvågning med rigtige tal: en app, der har været nede og er oppe igen.
+	now := time.Now()
+	st := NewStats(t.TempDir(), nil)
+	st.now = func() time.Time { return now }
+	st.Hit("x", browser("/"), "1.1.1.1", 200, true)
+	st.observe("x", checkResult{Err: "svarer ikke"})
+	st.observe("x", checkResult{Err: "svarer ikke"})
+	st.observe("x", checkResult{OK: true, Ms: 12})
+	statsLive, statsDown := st.AppView(app.App), st.AppView(app.App)
+	st.observe("x", checkResult{Err: "svarer ikke"})
+	st.observe("x", checkResult{Err: "svarer ikke"})
+	statsDown = st.AppView(app.App)
 	cases["setup.html"] = map[string]any{"Checks": []SetupCheck{{Name: "DNS", OK: false, Detail: "x"}, {Name: "Vibe Deploy kører", OK: true}}, "Domain": "d.dk", "IP": "1.2.3.4", "Signup": "https://d.dk/signup"}
 	cases["home.html"]["Alert"] = "Disken er 95 % fuld."
-	for _, tab := range []string{"oversigt", "versioner", "data", "log", "indstillinger"} {
-		cases["app.html#"+tab] = map[string]any{"A": app, "Tab": tab, "Log": "linje",
+	for _, tab := range []string{"oversigt", "versioner", "data", "log", "indstillinger", "statistik", "statistik#nede", "statistik#tom", "oversigt#tom"} {
+		stats := statsLive
+		switch tab {
+		case "statistik#nede":
+			stats = statsDown
+		case "statistik#tom", "oversigt#tom":
+			stats = (*Stats)(nil).AppView(app.App) // en Server uden Stats
+		}
+		cases["app.html#"+tab] = map[string]any{"A": app, "Tab": strings.Split(tab, "#")[0], "Log": "linje", "Stats": stats,
 			"Versions": []struct {
 				Version
 				Ago              string

@@ -348,6 +348,7 @@ func (s *Server) callTool(r *http.Request, u *User, tool string, raw json.RawMes
 		if len(app.AllowIPs) > 0 {
 			out += " Appen kan kun åbnes fra disse IP-adresser (ejeren ændrer det i dashboardet): " + strings.Join(app.AllowIPs, ", ") + ". Andre får 403."
 		}
+		out += s.stats.statusText(app)
 		return out, nil
 	case "get_logs":
 		if a.Lines <= 0 || a.Lines > 400 {

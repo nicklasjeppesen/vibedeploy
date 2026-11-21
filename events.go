@@ -185,13 +185,13 @@ func (s *Server) appEvents(w http.ResponseWriter, r *http.Request, u *User) {
 }
 
 // homeFingerprint er en kort beskrivelse af det, forsiden viser for brugeren u: hver synlig app med status,
-// tekst og version. Ændrer den sig, skal forsiden tegnes igen.
+// tekst, version og (for egne apps) om overvågningen får svar. Ændrer den sig, skal forsiden tegnes igen.
 func (s *Server) homeFingerprint(u *User) string {
 	db := s.st.Snapshot()
 	var parts []string
 	for slug, a := range db.Apps {
 		if canOpen(a, u) {
-			parts = append(parts, fmt.Sprintf("%s|%s|%s|%d|%s", slug, a.Status, a.StatusText, a.Current, a.Visibility))
+			parts = append(parts, fmt.Sprintf("%s|%s|%s|%d|%s|%t", slug, a.Status, a.StatusText, a.Current, a.Visibility, canManage(a, u) && s.stats.IsDown(slug)))
 		}
 	}
 	sort.Strings(parts)

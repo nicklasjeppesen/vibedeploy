@@ -6,14 +6,15 @@
   <h1>Dine apps</h1>
   <p class="muted">{{if .Data.Summary}}{{.Data.Summary}}.{{else}}Ingen apps endnu.{{end}}</p>
 </div></div>
+{{if .Data.Down}}<div class="note bad block"><b>Svarer ikke:</b> {{range $i, $n := .Data.Down}}{{if $i}}, {{end}}{{$n}}{{end}}. Åbn appen for at se, hvad der er galt.</div>{{end}}
 {{if .Data.Alert}}<div class="note bad block"><b>Serveren er ved at løbe tør:</b> {{.Data.Alert}} <a href="/server">Se hvad der fylder</a></div>{{end}}
 <div class="grid">
 {{range .Data.Apps}}
   <article class="card app">
-    <div class="row"><h2>{{.Name}}</h2><span class="status {{.Class}}"><i></i>{{.Label}}</span></div>
+    <div class="row"><h2>{{.Name}}</h2>{{if .Down}}<span class="status bad"><i></i>Svarer ikke</span>{{else}}<span class="status {{.Class}}"><i></i>{{.Label}}</span>{{end}}</div>
     <p class="muted">{{.URL}}</p>
     <p class="small">{{if .Manage}}<span class="chip">{{.VisLabel}}</span>{{else}}<span class="muted">Delt af {{.Owner}}</span>{{end}}</p>
-    <p class="muted small">{{if .StatusText}}{{.StatusText}}{{else}}Opdateret {{.Ago}}{{end}}</p>
+    <p class="muted small">{{if .StatusText}}{{.StatusText}}{{else}}Opdateret {{.Ago}}{{end}}{{if and .Manage .Current}} · {{.TodayViews}} {{if eq .TodayViews 1}}sidevisning{{else}}sidevisninger{{end}} i dag{{end}}</p>
     {{if .Manage}}{{if eq .Status "waiting"}}<a class="btn warnbtn" href="/apps/{{.Slug}}">Se og godkend</a>{{else}}<a class="btn" href="/apps/{{.Slug}}">Åbn</a>{{end}}
     {{else}}<a class="btn" href="{{.URL}}">Åbn appen</a>{{end}}
   </article>

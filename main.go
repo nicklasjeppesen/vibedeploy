@@ -32,6 +32,7 @@ type Server struct {
 	st        *Store
 	mgr       *Manager
 	mon       *Monitor
+	stats     *Stats // besøgstal og overvågning pr. app (stats.go)
 	upd       *Updater
 	rt        Runtime
 	pages     map[string]*template.Template
@@ -47,6 +48,9 @@ type Server struct {
 	closeOnce sync.Once // closing() i events.go: lukkes, når serveren lukker ned
 	shutOnce  sync.Once
 	closeCh   chan struct{}
+
+	cleanMu sync.Mutex
+	clean   cleanState // oprydning af Docker-cache (cleanup.go)
 
 	codeMu    sync.Mutex
 	setupCode string // kræves til første konto, når serveren ikke kører på localhost
@@ -123,6 +127,7 @@ func main() {
 	s.resetKey = resetMACKey(key)
 	s.mgr = NewManager(st, rt, abs)
 	s.mon = NewMonitor(abs, rt)
+	s.stats = NewStats(abs, s.statsTZ)
 	s.upd = NewUpdater(abs, st)
 	s.pages = loadPages()
 	if len(st.Snapshot().Users) == 0 {
@@ -140,6 +145,7 @@ func main() {
 	go s.mgr.DailyBackups()
 	go s.mon.Run()
 	go s.upd.Run()
+	go s.stats.Run(s.mgr, s.closing())
 
 	srv := &http.Server{Addr: *addr, Handler: s.handler(), ReadHeaderTimeout: 10 * time.Second}
 	srv.RegisterOnShutdown(s.beginShutdown) // afslut live-strømme med det samme, så nedlukningen ikke venter på dem
@@ -159,6 +165,19 @@ func main() {
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
+	s.stats.save(s.mgr) // besøgstal siden sidste gemning; programmet slutter, så snart main returnerer
+}
+
+// statsTZ er tidszonen, besøgstal pr. dag regnes i: den, ejeren har valgt til opdateringer (standard
+// Europe/Copenhagen).
+func (s *Server) statsTZ() *time.Location {
+	var name string
+	s.st.View(func(db *DB) { name = db.Settings.UpdateTZ })
+	loc, _, err := loadTZ(name)
+	if err != nil {
+		return time.UTC
+	}
+	return loc
 }
 
 // keyPath finder nøglefilen: -key-file, ellers systemd's credentials-mappe (LoadCredential=secret.key),

@@ -30,11 +30,11 @@
   {{if .Data.Rows}}
   <div class="tablewrap">
   <table class="usage">
-    <thead><tr><th scope="col">App</th><th scope="col">Status</th><th scope="col" class="num">CPU</th><th scope="col" class="num">Hukommelse</th><th scope="col" class="num">Data</th><th scope="col" class="num">Backups</th><th scope="col" class="num">Versioner</th></tr></thead>
+    <thead><tr><th scope="col">App</th><th scope="col">Status</th><th scope="col" class="num">Visninger, 7 dage</th><th scope="col" class="num">Oppetid, døgn</th><th scope="col" class="num">CPU</th><th scope="col" class="num">Hukommelse</th><th scope="col" class="num">Data</th><th scope="col" class="num">Backups</th><th scope="col" class="num">Versioner</th></tr></thead>
     <tbody>
     {{range .Data.Rows}}
-      <tr><th scope="row"><a href="/apps/{{.Slug}}">{{.Name}}</a></th><td><span class="status {{.Class}}"><i></i>{{.Status}}</span></td>
-        <td class="num">{{.CPU}}</td><td class="num">{{.Mem}}</td><td class="num">{{.Data}}</td><td class="num">{{.Backups}}</td><td class="num">{{.Files}}</td></tr>
+      <tr><th scope="row"><a href="/apps/{{.Slug}}">{{.Name}}</a></th><td>{{if .Down}}<span class="status bad"><i></i>Svarer ikke</span>{{else}}<span class="status {{.Class}}"><i></i>{{.Status}}</span>{{end}}</td>
+        <td class="num">{{.Views}}</td><td class="num">{{.Uptime}}</td><td class="num">{{.CPU}}</td><td class="num">{{.Mem}}</td><td class="num">{{.Data}}</td><td class="num">{{.Backups}}</td><td class="num">{{.Files}}</td></tr>
     {{end}}
     </tbody>
   </table>
@@ -53,6 +53,27 @@
   {{end}}
   </ul>
 </section>
+
+{{with .Data.Cache}}
+<section class="card" id="cache">
+  <div class="row"><h2>Ryd op i cache</h2>{{if .Running}}<span class="status warn"><i></i>Rydder op …</span>{{end}}</div>
+  {{if not .Docker}}
+  <p class="muted">Oprydning af cache findes kun, når Vibe Deploy kører med Docker.</p>
+  {{else}}
+  <p class="muted">Hver gang en app bygges, gemmer Docker lag og hentede pakker, så næste bygning går hurtigere. Det fylder med tiden meget. Her kan du fjerne det, der kan laves igen. Dine apps kører videre, og du kan stadig gå tilbage til tidligere versioner.</p>
+  <ul class="plain">
+    <li class="rowline"><span>Byggecache<br><span class="muted small">Fylder {{.BuildCache}}. Næste bygning af hver app tager lidt længere tid, fordi den hentes igen.</span></span><b>{{.Reclaim}}</b></li>
+    <li class="rowline"><span>Gamle images, som ingen app bruger<br><span class="muted small">Fra slettede apps og versioner, der er ryddet op. Versioner, du kan gå tilbage til, beholdes.</span></span><b>{{if .Orphans}}{{.Orphans}} · op til {{.OrphanSize}}{{else}}ingen{{end}}</b></li>
+  </ul>
+  {{if .Running}}<p class="muted">Oprydningen kører. Siden opdaterer sig selv.</p>
+  {{else}}<form method="post" action="/server/cleanup"><button class="btn">Ryd op nu</button></form>{{end}}
+  {{if .Last}}
+  <div class="note {{if .LastErr}}warn{{else}}ok{{end}} block"><b>Seneste oprydning {{.Last}}{{if .LastBy}} ({{.LastBy}}){{end}}: {{.LastFreed}} frigjort.</b>
+    {{range .LastDone}}<br>{{.}}{{end}}{{if .LastErr}}<br>{{.LastErr}}{{end}}</div>
+  {{end}}
+  {{end}}
+</section>
+{{end}}
 
 {{with .Data.Self}}
 <section class="card" id="vibedeploy">

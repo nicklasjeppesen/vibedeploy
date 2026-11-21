@@ -103,5 +103,6 @@ offentlig og skal committes.
 | `access.go`, `auth.go`, `oauth.go`, `reset.go`, `ratelimit.go` | Roller og deling, login og CSRF, OAuth 2.1 til AI-værktøjer, links til ny adgangskode, grænse for loginforsøg |
 | `data.go`, `gitdeploy.go`, `gitnew.go`, `gitwatch.go`, `imagedeploy.go` | Upload, `/data`, backups; git og deploy keys; formularen «Ny app fra git»; tjek af nyeste commit på git (kun når ejeren beder om det); færdige images |
 | `metrics*.go`, `serverpage.go`, `setup.go` | Siden Server, statussiden under installationen |
+| `stats.go`, `cleanup.go` | Besøgstal og overvågning pr. app (`data/stats.json`); «Ryd op i cache» på siden Server |
 | `install.go`, `install.sh`, `deploy/` | Installation, systemd-enheder, Caddyfile, cloud-init |
 | `web/` | HTML-skabeloner, CSS, JS |

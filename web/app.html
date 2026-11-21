@@ -51,6 +51,7 @@
 
 <nav class="tabs" aria-label="Appens sider">
   <a href="?tab=oversigt" {{if eq .Data.Tab "oversigt"}}class="on" aria-current="page"{{end}}>Oversigt</a>
+  <a href="?tab=statistik" {{if eq .Data.Tab "statistik"}}class="on" aria-current="page"{{end}}>Besøg og overvågning</a>
   <a href="?tab=versioner" {{if eq .Data.Tab "versioner"}}class="on" aria-current="page"{{end}}>Versioner</a>
   <a href="?tab=data" {{if eq .Data.Tab "data"}}class="on" aria-current="page"{{end}}>Data</a>
   <a href="?tab=log" {{if eq .Data.Tab "log"}}class="on" aria-current="page"{{end}}>Log</a>
@@ -69,12 +70,57 @@
     <dt>Hukommelse</dt><dd>{{.Mem}}</dd>{{end}}
     <dt>Data på disken</dt><dd>{{.Data}} · backups {{.Backups}}</dd>
     {{end}}
+    {{with .Data.Stats}}{{if .Periods}}
+    <dt>Overvågning</dt><dd><span class="status {{.Health.Class}}"><i></i>{{.Health.Label}}</span>{{with index .Health.Uptime 0}}{{if ne .Pct "–"}} · {{.Pct}} oppetid det seneste døgn{{end}}{{end}}</dd>
+    {{with index .Periods 0}}<dt>Besøg i dag</dt><dd>{{.Views}} sidevisninger · {{.Visitors}} besøgende <a class="small" href="?tab=statistik">Se mere</a></dd>{{end}}
+    {{end}}{{end}}
   </dl>
   <div class="actions left">
     {{if eq $a.Status "live"}}<form method="post" action="/apps/{{$a.Slug}}/stop"><button class="btn ghost">Sæt på pause</button></form>{{end}}
     {{if and $a.Current (ne $a.Status "building")}}<form method="post" action="/apps/{{$a.Slug}}/restart"><button class="btn ghost">{{if eq $a.Status "stopped"}}Start igen{{else}}Genstart{{end}}</button></form>{{end}}
   </div>
 </section>
+{{end}}
+
+{{if eq .Data.Tab "statistik"}}
+{{with .Data.Stats}}
+<section class="card">
+  <div class="row"><h2>Overvågning</h2><span class="status {{.Health.Class}}"><i></i>{{.Health.Label}}</span></div>
+  <p class="muted">{{if .Health.Watched}}Vibe Deploy spørger appen hvert minut, om den svarer. Svarer den ikke to gange i træk, regnes den for nede, og det skrives i loggen.{{else}}{{.Health.Since}}{{end}}</p>
+  {{if and .Health.Watched (eq .Health.Class "bad")}}<div class="note bad block"><b>Appen svarer ikke.</b> {{.Health.Since}}. {{.Health.LastErr}}
+    <p>Prøv at genstarte den, eller bed Claude om at hente loggen med get_logs og rette fejlen.</p>
+    <form method="post" action="/apps/{{$a.Slug}}/restart" class="inline"><button class="btn">Genstart appen</button></form></div>{{end}}
+  <dl class="facts">
+    {{if .Health.LastCheck}}<dt>Sidste tjek</dt><dd>{{.Health.LastCheck}}{{if .Health.LastMs}} · svarede på {{.Health.LastMs}}{{else if .Health.LastErr}} · {{.Health.LastErr}}{{end}}</dd>{{end}}
+    {{range .Health.Uptime}}<dt>Oppetid, {{.Name}}</dt><dd>{{.Pct}}</dd>{{end}}
+    {{if .Health.AvgMs}}<dt>Svartid, seneste døgn</dt><dd>{{.Health.AvgMs}} i gennemsnit · langsomste {{.Health.MaxMs}}</dd>{{end}}
+  </dl>
+  <div class="charts single"><figure class="chartbox"><figcaption>{{.LatencyHour.Name}}</figcaption>{{.LatencyHour.SVG}}</figure></div>
+  <p class="muted small">Røde søjler er timer, hvor appen ikke svarede på alle tjek. Hold musen over en søjle for at se tallene.</p>
+  <h3>Nedbrud</h3>
+  {{if .Health.Incidents}}
+  <ul class="plain incidents">
+    {{range .Health.Incidents}}<li><b>{{.When}}</b> · {{.Duration}}<br><span class="muted small">Appen {{.Reason}}.</span></li>{{end}}
+  </ul>
+  {{else}}<p class="muted">Ingen nedbrud registreret.</p>{{end}}
+</section>
+
+<section class="card">
+  <h2>Besøg</h2>
+  <p class="muted">Tæller alt, der går gennem appens adresse. En sidevisning er en side, der blev vist i en browser; billeder, scripts, API-kald og robotter tælles ikke med. Besøgende tælles pr. dag uden at gemme IP-adresser.</p>
+  <div class="tablewrap">
+  <table class="stats">
+    <thead><tr><th scope="col"></th><th scope="col" class="num">Sidevisninger</th><th scope="col" class="num">Besøgende</th><th scope="col" class="num">Forespørgsler</th><th scope="col" class="num">Fejl</th></tr></thead>
+    <tbody>{{range .Periods}}<tr><th scope="row">{{.Name}}</th><td class="num">{{.Views}}</td><td class="num">{{.Visitors}}</td><td class="num">{{.Requests}}</td><td class="num">{{.Errors}}</td></tr>{{end}}</tbody>
+  </table>
+  </div>
+  <div class="charts">
+    <figure class="chartbox"><figcaption>{{.ViewsHours.Name}}</figcaption>{{.ViewsHours.SVG}}</figure>
+    <figure class="chartbox"><figcaption>{{.ViewsDays.Name}}</figcaption>{{.ViewsDays.SVG}}</figure>
+  </div>
+  <p class="muted small">Besøgende over flere dage er summen af hver dag, så en, der kommer igen næste dag, tælles igen. «Fejl» er svar, hvor appen fejlede eller ikke svarede (500 og derover). Tal pr. dag gemmes i 90 dage.</p>
+</section>
+{{end}}
 {{end}}
 
 {{if eq .Data.Tab "versioner"}}

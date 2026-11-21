@@ -98,6 +98,20 @@ Logfiler roteres ved 2 MB.
 databasen og Dockers images. Er disken eller hukommelsen over 90 %, står der en advarsel på forsiden.
 Appens egen side viser dens forbrug under Oversigt.
 
+**Besøg og overvågning:** hver app har fanen «Besøg og overvågning». Proxyen tæller alt, der går gennem appens adresse:
+sidevisninger (HTML-sider vist i en browser; billeder, scripts, API-kald og robotter tælles ikke), besøgende pr. dag,
+forespørgsler og fejl (svar 500 og derover). Besøgende tælles uden at gemme IP-adresser: IP og browser hashes med et
+salt, der skiftes hver dag. Vibe Deploy spørger desuden hver kørende app på `/health` hvert minut. Svarer den ikke to
+gange i træk, regnes den for nede: det står i appens log, på forsiden og under fanen med oppetid, svartid og nedbrud.
+Tallene ligger i `data/stats.json` (pr. time i 48 timer, pr. dag i 90 dage) og overlever en genstart. `get_status`
+fortæller også AI'en, om appen svarer, og hvor mange besøg den har.
+
+**Ryd op i cache:** på siden «Server» viser «Ryd op i cache», hvor meget Dockers byggecache og gamle images fylder, og
+knappen «Ryd op nu» fjerner det i baggrunden: byggecachen (`docker builder prune -af`), Vibe Deploys egne images, som
+ingen app bruger (fra slettede apps og versioner, der er ryddet op), og lag uden navn. Images til den kørende version,
+til versioner, man kan gå tilbage til, og til apps, der bygger lige nu, røres ikke; heller ikke andre images på serveren.
+Næste bygning af hver app tager lidt længere tid, fordi base-images og pakker hentes igen.
+
 **Lager:** Al tilstand ligger i SQLite (`data/state.db`). Findes der en `state.json` fra en tidligere version, flyttes den
 automatisk over ved første start og omdøbes til `state.json.importeret` (slet den bagefter: den har hemmeligheder i klartekst).
 Der tages en kopi af databasen hver nat i `backups/_server/` (de 7 nyeste).
@@ -189,6 +203,8 @@ Godkend i dashboardet, og åbn adressen.
 | Byggevejledning og Dockerfile-skabeloner til AI'en, tjek af Dockerfile | `buildguide.go` |
 | Lager i SQLite med krypterede hemmeligheder | `store.go`, `crypto.go` |
 | Serverens CPU, hukommelse og disk (siden «Server») | `metrics*.go`, `serverpage.go` |
+| Besøgstal og overvågning pr. app | `stats.go` |
+| Oprydning af Docker-cache (siden «Server») | `cleanup.go` |
 | Statusside på serverens IP under installationen | `setup.go` |
 | Installation: `install.sh` og `vibedeploy install` | `install.sh`, `install.go` |
 | Opdatering af Vibe Deploy selv (tjek, knap, `vibedeploy update`, tilbagerulning) | `update.go`, `deploy/vibedeploy-update.*` |
@@ -213,6 +229,10 @@ Fejler en ny version, kører den forrige videre.
 - Mister du nøglen (`secret.key`), kan hemmelighederne ikke læses igen. Gem en kopi et sikkert sted, adskilt fra backuppen af data.
 - Login-sessioner og AI-tokens gemmes ukrypteret i `state.db` (som før i state.json). Kun hemmeligheder krypteres.
 - Historikken på siden «Server» ligger kun i hukommelsen og starter forfra, når Vibe Deploy genstartes.
+- Besøgstal og overvågning er kun afprøvet med tests og demo-runtime'n. «Ryd op nu» (Docker) er ikke dækket af tests;
+  kun udvælgelsen af, hvad der må fjernes, er testet. Der sendes ingen mail eller besked, når en app går ned; det
+  står kun i dashboardet og loggen. Overvågningens tjek af `/health` hvert minut kan ses i appens egen log.
+- Besøg tælles kun gennem Vibe Deploys proxy, og `stats.json` er ikke med i den natlige backup af `state.db`.
 - Tilbagerulning ved en opdatering, der ikke svarer, er kun afprøvet med tests og en falsk `systemctl`, ikke på en rigtig server.
 - Opdateringen af Vibe Deploy har kun én kanal (nyeste release). Der er ingen beta-kanal og ingen mulighed for at
   springe en bestemt version over, ud over at en version, der er rullet tilbage, ikke prøves igen automatisk.
